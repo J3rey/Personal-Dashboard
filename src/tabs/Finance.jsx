@@ -82,7 +82,11 @@ export default function Finance({ state, setState }) {
 
   function getFilteredExpenses() {
     return state.expenses.filter(e => {
-      if (e.isHeader || e.isEnd) return true
+      if (e.isHeader || e.isEnd) {
+        if (monthFilter === 'all') return true
+        if (!e.date) return false
+        return new Date(e.date + 'T12:00:00').getMonth() + 1 === parseInt(monthFilter)
+      }
       if (activeFilters.length > 0 && !activeFilters.includes(e.cat)) return false
       if (monthFilter !== 'all') {
         const em = new Date(e.date + 'T12:00:00').getMonth() + 1
@@ -149,17 +153,25 @@ export default function Finance({ state, setState }) {
   }
 
   function addEventEnd() {
-    const headers = state.expenses.filter(e => e.isHeader)
-    const last = headers[headers.length - 1]
+    const endedIds = new Set(state.expenses.filter(e => e.isEnd && e.headerId).map(e => e.headerId))
+    const last = [...state.expenses].reverse().find(e => e.isHeader && !endedIds.has(e.id))
     if (!last) return
     setState(prev => ({
       ...prev,
-      expenses: [...prev.expenses, { id: 'e' + uid(), isEnd: true, label: 'End of ' + last.label, date: newDate || '9999-12-31' }],
+      expenses: [...prev.expenses, { id: 'e' + uid(), isEnd: true, label: 'End of ' + last.label, headerId: last.id, date: newDate }],
     }))
   }
 
   function deleteExpense(id) {
-    setState(prev => ({ ...prev, expenses: prev.expenses.filter(e => e.id !== id) }))
+    setState(prev => {
+      const target = prev.expenses.find(e => e.id === id)
+      const toDelete = new Set([id])
+      if (target?.isHeader) {
+        const end = prev.expenses.find(e => e.isEnd && e.headerId === id)
+        if (end) toDelete.add(end.id)
+      }
+      return { ...prev, expenses: prev.expenses.filter(e => !toDelete.has(e.id)) }
+    })
   }
 
   function editExpenseCell(id, field) {
@@ -279,6 +291,11 @@ export default function Finance({ state, setState }) {
 
   const chartData = showCharts ? buildChartData() : null
 
+  const hasUnclosedHeader = (() => {
+    const endedIds = new Set(state.expenses.filter(e => e.isEnd && e.headerId).map(e => e.headerId))
+    return state.expenses.some(e => e.isHeader && !endedIds.has(e.id))
+  })()
+
   // Overview by category
   const byCat = {}
   CATS.forEach(c => { byCat[c] = 0 })
@@ -349,12 +366,14 @@ export default function Finance({ state, setState }) {
                   {filtered.map(e => {
                     if (e.isHeader) return (
                       <tr key={e.id} className="ev-header-row">
-                        <td colSpan={6}>&#9632; {e.label}</td>
+                        <td colSpan={5}>&#9632; {e.label}</td>
+                        <td><button className="del-btn" onClick={() => deleteExpense(e.id)}>×</button></td>
                       </tr>
                     )
                     if (e.isEnd) return (
                       <tr key={e.id} className="ev-end-row">
-                        <td colSpan={6}>&#9633; {e.label}</td>
+                        <td colSpan={5}>&#9633; {e.label}</td>
+                        <td><button className="del-btn" onClick={() => deleteExpense(e.id)}>×</button></td>
                       </tr>
                     )
                     const cls = getCostClass(e.cost, allCosts)
@@ -403,7 +422,7 @@ export default function Finance({ state, setState }) {
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <input className="form-input" placeholder="+ Event header (e.g. Trip to Sydney)" value={newHeader} onChange={e => setNewHeader(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px', width: '260px' }} />
                 <button className="btn-ghost" onClick={addEventHeader} style={{ fontSize: '12px', padding: '4px 10px' }}>Add Header</button>
-                <button className="btn-ghost" onClick={addEventEnd} style={{ fontSize: '12px', padding: '4px 10px', color: 'var(--text3)' }}>End Event</button>
+                <button className="btn-ghost" onClick={addEventEnd} disabled={!hasUnclosedHeader} style={{ fontSize: '12px', padding: '4px 10px', color: hasUnclosedHeader ? 'var(--text2)' : 'var(--text3)', opacity: hasUnclosedHeader ? 1 : 0.45, cursor: hasUnclosedHeader ? 'pointer' : 'default' }}>End Event</button>
               </div>
             </div>
           </div>
