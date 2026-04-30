@@ -40,7 +40,7 @@ function createCentrePlugin(total) {
       ctx.fillText('total', cx, cy - 10)
       ctx.fillStyle = '#1a1a18'
       ctx.font = '600 17px DM Sans'
-      ctx.fillText('A$' + total.toFixed(0), cx, cy + 8)
+      ctx.fillText('$' + total.toFixed(0), cx, cy + 8)
       ctx.restore()
     },
   }
@@ -73,6 +73,11 @@ export default function Finance({ state, setState }) {
   const [currFrom, setCurrFrom]     = useState('AUD')
   const [currTo, setCurrTo]         = useState('USD')
   const [currResult, setCurrResult] = useState('')
+
+  // Inline income amount editing + modal
+  const [editingIncomeId, setEditingIncomeId] = useState(null)
+  const [editIncomeValue, setEditIncomeValue] = useState('')
+  const [incomeModal, setIncomeModal]         = useState(null)
 
   function toggleFilter(cat) {
     setActiveFilters(prev =>
@@ -174,23 +179,33 @@ export default function Finance({ state, setState }) {
     })
   }
 
-  function editExpenseCell(id, field) {
+  function editExpenseCat(id) {
     const exps = [...state.expenses]
     const e = exps.find(x => x.id === id)
     if (!e) return
-    if (field === 'cat') {
-      const v = prompt('Edit category (Food/Transport/Misc/Recurring/Events/Clothes/Gifts):', e.cat)
-      if (v && CATS.includes(v)) { e.cat = v; setState(prev => ({ ...prev, expenses: exps })) }
-    } else if (field === 'cost') {
-      const v = parseFloat(prompt('Edit cost:', e.cost))
-      if (!isNaN(v)) { e.cost = v; setState(prev => ({ ...prev, expenses: exps })) }
-    } else if (field === 'date') {
-      const v = prompt('Edit date (YYYY-MM-DD):', e.date)
-      if (v && /\d{4}-\d{2}-\d{2}/.test(v)) { e.date = v; setState(prev => ({ ...prev, expenses: exps })) }
-    } else {
-      const v = prompt('Edit detail:', e.detail)
-      if (v !== null) { e.detail = v; setState(prev => ({ ...prev, expenses: exps })) }
+    const v = prompt('Edit category (Food/Transport/Misc/Recurring/Events/Clothes/Gifts):', e.cat)
+    if (v && CATS.includes(v)) { e.cat = v; setState(prev => ({ ...prev, expenses: exps })) }
+  }
+
+  function startEditIncome(id, amount) {
+    setEditingIncomeId(id)
+    setEditIncomeValue(String(amount))
+  }
+
+  function commitIncomeEdit() {
+    if (!editingIncomeId) return
+    const v = parseFloat(editIncomeValue)
+    if (!isNaN(v)) {
+      setState(prev => ({ ...prev, income: prev.income.map(i => i.id === editingIncomeId ? { ...i, amount: v } : i) }))
     }
+    setEditingIncomeId(null)
+    setEditIncomeValue('')
+  }
+
+  function saveIncomeModal() {
+    if (!incomeModal) return
+    setState(prev => ({ ...prev, income: prev.income.map(i => i.id === incomeModal.id ? { ...incomeModal, amount: parseFloat(incomeModal.amount) || i.amount } : i) }))
+    setIncomeModal(null)
   }
 
   function addIncome() {
@@ -205,18 +220,6 @@ export default function Finance({ state, setState }) {
 
   function deleteIncome(id) {
     setState(prev => ({ ...prev, income: prev.income.filter(i => i.id !== id) }))
-  }
-
-  function editIncome(id) {
-    const incs = [...state.income]
-    const i = incs.find(x => x.id === id)
-    if (!i) return
-    const field = prompt('Edit field (source/amount/date):', 'amount')
-    if (!field) return
-    if (field === 'source') { const v = prompt('Source:', i.source); if (v !== null) i.source = v }
-    else if (field === 'amount') { const v = parseFloat(prompt('Amount:', i.amount)); if (!isNaN(v)) i.amount = v }
-    else if (field === 'date') { const v = prompt('Date (YYYY-MM-DD):', i.date); if (v) i.date = v }
-    setState(prev => ({ ...prev, income: incs }))
   }
 
   function convertCurrency() {
@@ -244,7 +247,7 @@ export default function Finance({ state, setState }) {
       labels: CATS,
       datasets: [{ data: CATS.map(c => parseFloat((catTotals[c] || 0).toFixed(2))), backgroundColor: CATS.map(c => CAT_COLORS[c]), borderWidth: 2, borderColor: '#fff' }],
     }
-    const donutOptions = { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.label}: A$${ctx.raw.toFixed(2)}` } } } }
+    const donutOptions = { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw.toFixed(2)}` } } } }
 
     let barLabels, barDataArr
     if (isAll) {
@@ -308,16 +311,16 @@ export default function Finance({ state, setState }) {
       <div className="finance-top">
         <div className="stat-card">
           <div className="stat-label">Total Expenses</div>
-          <div className="stat-value neg">A${totalExp.toFixed(2)}</div>
+          <div className="stat-value neg">${totalExp.toFixed(2)}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Total Income</div>
-          <div className="stat-value pos">A${totalInc.toFixed(2)}</div>
+          <div className="stat-value pos">${totalInc.toFixed(2)}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Net</div>
           <div className={'stat-value ' + (net >= 0 ? 'pos' : 'neg')}>
-            {net >= 0 ? '+' : '−'}A${Math.abs(net).toFixed(2)}
+            {net >= 0 ? '+' : '−'}${Math.abs(net).toFixed(2)}
           </div>
         </div>
       </div>
@@ -385,10 +388,64 @@ export default function Finance({ state, setState }) {
                         : <span className="badge badge-normal">—</span>
                     return (
                       <tr key={e.id}>
-                        <td style={{ fontSize: '11px', color: 'var(--text2)', fontFamily: "'DM Mono', monospace" }} className="editable-cell" onDoubleClick={() => editExpenseCell(e.id, 'date')}>{ds}</td>
-                        <td className="editable-cell" onDoubleClick={() => editExpenseCell(e.id, 'cat')}><span className={`cat-badge cat-${e.cat}`}>{e.cat}</span></td>
-                        <td className="editable-cell" onDoubleClick={() => editExpenseCell(e.id, 'detail')}>{e.detail}</td>
-                        <td style={{ textAlign: 'right' }}><span className={`cost-cell ${cls}`} style={{ cursor: 'pointer' }} onDoubleClick={() => editExpenseCell(e.id, 'cost')}>A${e.cost.toFixed(2)}</span></td>
+                        <td style={{ fontSize: '11px', color: 'var(--text2)', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>
+                          <span style={{ pointerEvents: 'none', userSelect: 'none' }}>{e.date.slice(5, 7)}/</span>
+                          <span suppressContentEditableWarning contentEditable style={{ cursor: 'text', outline: 'none' }}
+                            onKeyDown={ev => {
+                              if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur(); return }
+                              if (ev.key === 'Escape') { ev.currentTarget.textContent = e.date.slice(8); ev.currentTarget.blur(); return }
+                              if (ev.ctrlKey || ev.metaKey) return
+                              if (/^(Arrow|Backspace|Delete|Tab|Home|End)/.test(ev.key)) return
+                              if (!/^\d$/.test(ev.key)) { ev.preventDefault(); return }
+                              const selLen = window.getSelection()?.toString().length || 0
+                              if (ev.currentTarget.textContent.length - selLen >= 2) ev.preventDefault()
+                            }}
+                            onBlur={ev => {
+                              const dayNum = parseInt(ev.currentTarget.textContent.trim(), 10)
+                              if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31) {
+                                const [yr, mo] = e.date.split('-')
+                                const newDate = `${yr}-${mo}-${String(dayNum).padStart(2, '0')}`
+                                ev.currentTarget.textContent = String(dayNum).padStart(2, '0')
+                                if (newDate !== e.date) setState(prev => {
+                                  const exps = prev.expenses.map(x => x.id === e.id ? { ...x, date: newDate } : x)
+                                  const specials = exps.filter(x => x.isHeader || x.isEnd)
+                                  const regulars = exps.filter(x => !x.isHeader && !x.isEnd)
+                                  regulars.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+                                  return { ...prev, expenses: [...regulars, ...specials] }
+                                })
+                              } else {
+                                ev.currentTarget.textContent = e.date.slice(8)
+                              }
+                            }}
+                          >{e.date.slice(8)}</span>
+                        </td>
+                        <td className="editable-cell" onDoubleClick={() => editExpenseCat(e.id)}><span className={`cat-badge cat-${e.cat}`}>{e.cat}</span></td>
+                        <td suppressContentEditableWarning contentEditable style={{ cursor: 'text' }}
+                          onBlur={ev => { const v = ev.currentTarget.textContent; if (v !== e.detail) setState(prev => ({ ...prev, expenses: prev.expenses.map(x => x.id === e.id ? { ...x, detail: v } : x) })) }}
+                          onKeyDown={ev => { if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur() } if (ev.key === 'Escape') { ev.currentTarget.textContent = e.detail; ev.currentTarget.blur() } }}
+                        >{e.detail}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <span suppressContentEditableWarning contentEditable className={`cost-cell ${cls}`} style={{ cursor: 'text' }}
+                            onKeyDown={ev => {
+                              if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur(); return }
+                              if (ev.key === 'Escape') { ev.currentTarget.textContent = e.cost.toFixed(2); ev.currentTarget.blur(); return }
+                              if (ev.ctrlKey || ev.metaKey) return
+                              if (/^(Arrow|Backspace|Delete|Tab|Home|End)/.test(ev.key)) return
+                              if (!/^\d$/.test(ev.key) && ev.key !== '.') { ev.preventDefault(); return }
+                              if (ev.key === '.' && ev.currentTarget.textContent.includes('.')) ev.preventDefault()
+                            }}
+                            onBlur={ev => {
+                              const v = parseFloat(ev.currentTarget.textContent.trim())
+                              if (!isNaN(v) && v >= 0) {
+                                const rounded = Math.round(v * 100) / 100
+                                ev.currentTarget.textContent = rounded.toFixed(2)
+                                if (rounded !== e.cost) setState(prev => ({ ...prev, expenses: prev.expenses.map(x => x.id === e.id ? { ...x, cost: rounded } : x) }))
+                              } else {
+                                ev.currentTarget.textContent = e.cost.toFixed(2)
+                              }
+                            }}
+                          >{e.cost.toFixed(2)}</span>
+                        </td>
                         <td>{badge}</td>
                         <td><button className="del-btn" onClick={() => deleteExpense(e.id)}>×</button></td>
                       </tr>
@@ -441,7 +498,7 @@ export default function Finance({ state, setState }) {
                   {CATS.filter(c => (chartData.catTotals[c] || 0) > 0).map(c => (
                     <div key={c} className="legend-item">
                       <div className="legend-dot" style={{ background: CAT_COLORS[c] }} />
-                      {c} A${(chartData.catTotals[c] || 0).toFixed(2)}
+                      {c} ${(chartData.catTotals[c] || 0).toFixed(2)}
                     </div>
                   ))}
                 </div>
@@ -478,13 +535,13 @@ export default function Finance({ state, setState }) {
               return (
                 <div key={c} className="overview-row">
                   <span>{c}</span>
-                  <span className={`cost-cell ${cls}`} style={{ fontSize: '11px' }}>A${v.toFixed(2)}</span>
+                  <span className={`cost-cell ${cls}`} style={{ fontSize: '11px' }}>${v.toFixed(2)}</span>
                 </div>
               )
             })}
             <div className="overview-total">
               <span>Total</span>
-              <span>A${monthExpenses.reduce((a, e) => a + e.cost, 0).toFixed(2)}</span>
+              <span>${monthExpenses.reduce((a, e) => a + e.cost, 0).toFixed(2)}</span>
             </div>
           </div>
 
@@ -492,18 +549,21 @@ export default function Finance({ state, setState }) {
           <div className="overview-box">
             <div className="overview-box-hdr"><h3>Income</h3></div>
             {monthIncome.map(i => (
-              <div key={i.id} className="overview-row" style={{ gap: '8px' }}>
+              <div key={i.id} className="overview-row" style={{ gap: '8px', cursor: 'pointer' }} onClick={() => { setEditingIncomeId(null); setIncomeModal({ ...i }) }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '12px', fontWeight: 500 }}>{i.source}{i.salary ? ' (Salary)' : ''}</div>
                   <div style={{ fontSize: '10px', color: 'var(--text3)' }}>{i.date}</div>
                 </div>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', color: 'var(--green)', cursor: 'pointer' }} onDoubleClick={() => editIncome(i.id)}>A${i.amount.toFixed(2)}</span>
-                <button className="del-btn" onClick={() => deleteIncome(i.id)}>×</button>
+                {editingIncomeId === i.id
+                  ? <input type="number" value={editIncomeValue} onChange={ev => setEditIncomeValue(ev.target.value)} onBlur={commitIncomeEdit} onKeyDown={ev => { if (ev.key === 'Enter') commitIncomeEdit(); if (ev.key === 'Escape') { setEditingIncomeId(null); setEditIncomeValue('') } }} autoFocus step="0.01" onClick={ev => ev.stopPropagation()} style={{ width: '80px', fontFamily: "'DM Mono', monospace", fontSize: '12px', color: 'var(--green)', border: 'none', outline: 'none', background: 'transparent', padding: 0, textAlign: 'right' }} />
+                  : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', color: 'var(--green)' }}>${i.amount.toFixed(2)}</span>
+                }
+                <button className="del-btn" onClick={ev => { ev.stopPropagation(); deleteIncome(i.id) }}>×</button>
               </div>
             ))}
             <div className="overview-total">
               <span>Total</span>
-              <span>A${totalInc.toFixed(2)}</span>
+              <span>${totalInc.toFixed(2)}</span>
             </div>
             <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
@@ -557,6 +617,37 @@ export default function Finance({ state, setState }) {
           </div>
         </div>
       </div>
+
+      {/* Income edit modal */}
+      {incomeModal && (
+        <div onClick={() => setIncomeModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div onClick={ev => ev.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px', width: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text1)', marginBottom: '18px' }}>Edit Income</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '10px', color: 'var(--text3)', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Date</label>
+                <input className="form-input" type="date" value={incomeModal.date} onChange={ev => setIncomeModal(m => ({ ...m, date: ev.target.value }))} style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '10px', color: 'var(--text3)', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Amount</label>
+                <input className="form-input" type="number" step="0.01" value={incomeModal.amount} onChange={ev => setIncomeModal(m => ({ ...m, amount: ev.target.value }))} style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }} />
+              </div>
+            </div>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '10px', color: 'var(--text3)', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Source</label>
+              <input className="form-input" value={incomeModal.source} onChange={ev => setIncomeModal(m => ({ ...m, source: ev.target.value }))} style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }} />
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: 'var(--text2)', cursor: 'pointer', marginBottom: '18px' }}>
+              <input type="checkbox" checked={!!incomeModal.salary} onChange={ev => setIncomeModal(m => ({ ...m, salary: ev.target.checked }))} style={{ accentColor: 'var(--accent)' }} />
+              Mark as Salary
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn-primary" onClick={saveIncomeModal} style={{ flex: 1, fontSize: '12px', padding: '7px 0' }}>Save</button>
+              <button className="btn-ghost" onClick={() => setIncomeModal(null)} style={{ flex: 1, fontSize: '12px', padding: '7px 0' }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
