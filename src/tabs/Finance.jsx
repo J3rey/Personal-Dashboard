@@ -49,6 +49,7 @@ function createCentrePlugin(total) {
 export default function Finance({ state, setState }) {
   const [activeFilters, setActiveFilters] = useState([])
   const [monthFilter, setMonthFilter] = useState(String(new Date().getMonth() + 1))
+  const [yearFilter, setYearFilter]   = useState(new Date().getFullYear())
   const [showCharts, setShowCharts] = useState(false)
   const [showCurrency, setShowCurrency] = useState(false)
   const [nameFieldVisible, setNameFieldVisible] = useState(false)
@@ -85,15 +86,16 @@ export default function Finance({ state, setState }) {
   function getFilteredExpenses() {
     return state.expenses.filter(e => {
       if (e.isHeader || e.isEnd) {
-        if (monthFilter === 'all') return true
         if (!e.date) return false
-        return new Date(e.date + 'T12:00:00').getMonth() + 1 === parseInt(monthFilter)
+        const d = new Date(e.date + 'T12:00:00')
+        if (d.getFullYear() !== yearFilter) return false
+        if (monthFilter === 'all') return true
+        return d.getMonth() + 1 === parseInt(monthFilter)
       }
+      const d = new Date(e.date + 'T12:00:00')
+      if (d.getFullYear() !== yearFilter) return false
       if (activeFilters.length > 0 && !activeFilters.includes(e.cat)) return false
-      if (monthFilter !== 'all') {
-        const em = new Date(e.date + 'T12:00:00').getMonth() + 1
-        if (em !== parseInt(monthFilter)) return false
-      }
+      if (monthFilter !== 'all' && d.getMonth() + 1 !== parseInt(monthFilter)) return false
       return true
     })
   }
@@ -101,16 +103,20 @@ export default function Finance({ state, setState }) {
   function getMonthFilteredExpenses() {
     return state.expenses.filter(e => {
       if (e.isHeader || e.isEnd) return false
+      const d = new Date(e.date + 'T12:00:00')
+      if (d.getFullYear() !== yearFilter) return false
       if (monthFilter === 'all') return true
-      return new Date(e.date + 'T12:00:00').getMonth() + 1 === parseInt(monthFilter)
+      return d.getMonth() + 1 === parseInt(monthFilter)
     })
   }
 
   function getMonthFilteredIncome() {
-    return state.income.filter(e =>
-      monthFilter === 'all' ||
-      new Date(e.date + 'T12:00:00').getMonth() + 1 === parseInt(monthFilter)
-    )
+    return state.income.filter(e => {
+      const d = new Date(e.date + 'T12:00:00')
+      if (d.getFullYear() !== yearFilter) return false
+      if (monthFilter === 'all') return true
+      return d.getMonth() + 1 === parseInt(monthFilter)
+    })
   }
 
   const filtered = getFilteredExpenses()
@@ -218,10 +224,12 @@ export default function Finance({ state, setState }) {
 
     const catTotals = {}
     CATS.forEach(c => {
-      catTotals[c] = state.expenses.filter(e =>
-        !e.isHeader && !e.isEnd && e.cat === c &&
-        (isAll || new Date(e.date + 'T12:00:00').getMonth() + 1 === selMo)
-      ).reduce((a, e) => a + e.cost, 0)
+      catTotals[c] = state.expenses.filter(e => {
+        if (e.isHeader || e.isEnd || e.cat !== c) return false
+        const d = new Date(e.date + 'T12:00:00')
+        if (d.getFullYear() !== yearFilter) return false
+        return isAll || d.getMonth() + 1 === selMo
+      }).reduce((a, e) => a + e.cost, 0)
     })
     const total = Object.values(catTotals).reduce((a, b) => a + b, 0)
 
@@ -236,7 +244,9 @@ export default function Finance({ state, setState }) {
       const monthData = {}
       for (let mo = 1; mo <= 12; mo++) { monthData[mo] = {}; CATS.forEach(c => { monthData[mo][c] = 0 }) }
       state.expenses.filter(e => !e.isHeader && !e.isEnd).forEach(e => {
-        const mo = new Date(e.date + 'T12:00:00').getMonth() + 1
+        const d = new Date(e.date + 'T12:00:00')
+        if (d.getFullYear() !== yearFilter) return
+        const mo = d.getMonth() + 1
         if (monthData[mo]) CATS.forEach(c => { if (e.cat === c) monthData[mo][c] += e.cost })
       })
       const activeMos = Object.keys(monthData).filter(mo => CATS.some(c => monthData[mo][c] > 0))
@@ -288,13 +298,21 @@ export default function Finance({ state, setState }) {
   const maxCatVal = Math.max(...CATS.map(c => byCat[c]))
 
   const monthHeading = monthFilter === 'all'
-    ? String(new Date().getFullYear())
-    : `${MONTH_NAMES[parseInt(monthFilter) - 1]} ${new Date().getFullYear()}`
+    ? 'All Months'
+    : MONTH_NAMES[parseInt(monthFilter) - 1]
 
   return (
     <div className="panel">
-      <div style={{ marginBottom: '12px' }}>
-        <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text1)', letterSpacing: '-0.3px' }}>{monthHeading}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text1)', letterSpacing: '-0.3px' }}>{monthHeading}</div>
+          <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text3)' }}>{yearFilter}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', background: 'var(--surface2)', borderRadius: '8px', padding: '3px 4px' }}>
+          <button className="btn-ghost" onClick={() => setYearFilter(y => y - 1)} style={{ fontSize: '12px', padding: '3px 8px', borderRadius: '5px' }}>←</button>
+          <span style={{ fontSize: '13px', fontWeight: 600, minWidth: '38px', textAlign: 'center', color: 'var(--text1)' }}>{yearFilter}</span>
+          <button className="btn-ghost" onClick={() => setYearFilter(y => y + 1)} style={{ fontSize: '12px', padding: '3px 8px', borderRadius: '5px' }}>→</button>
+        </div>
       </div>
       {/* Top stat cards */}
       <div className="finance-top">
