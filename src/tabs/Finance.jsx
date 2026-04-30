@@ -48,7 +48,7 @@ function createCentrePlugin(total) {
 
 export default function Finance({ state, setState }) {
   const [activeFilters, setActiveFilters] = useState([])
-  const [monthFilter, setMonthFilter] = useState('all')
+  const [monthFilter, setMonthFilter] = useState(String(new Date().getMonth() + 1))
   const [showCharts, setShowCharts] = useState(false)
   const [showCurrency, setShowCurrency] = useState(false)
   const [nameFieldVisible, setNameFieldVisible] = useState(false)
@@ -74,10 +74,7 @@ export default function Finance({ state, setState }) {
   const [currTo, setCurrTo]         = useState('USD')
   const [currResult, setCurrResult] = useState('')
 
-  // Inline income amount editing + modal
-  const [editingIncomeId, setEditingIncomeId] = useState(null)
-  const [editIncomeValue, setEditIncomeValue] = useState('')
-  const [incomeModal, setIncomeModal]         = useState(null)
+  const [incomeModal, setIncomeModal] = useState(null)
 
   function toggleFilter(cat) {
     setActiveFilters(prev =>
@@ -187,21 +184,6 @@ export default function Finance({ state, setState }) {
     if (v && CATS.includes(v)) { e.cat = v; setState(prev => ({ ...prev, expenses: exps })) }
   }
 
-  function startEditIncome(id, amount) {
-    setEditingIncomeId(id)
-    setEditIncomeValue(String(amount))
-  }
-
-  function commitIncomeEdit() {
-    if (!editingIncomeId) return
-    const v = parseFloat(editIncomeValue)
-    if (!isNaN(v)) {
-      setState(prev => ({ ...prev, income: prev.income.map(i => i.id === editingIncomeId ? { ...i, amount: v } : i) }))
-    }
-    setEditingIncomeId(null)
-    setEditIncomeValue('')
-  }
-
   function saveIncomeModal() {
     if (!incomeModal) return
     setState(prev => ({ ...prev, income: prev.income.map(i => i.id === incomeModal.id ? { ...incomeModal, amount: parseFloat(incomeModal.amount) || i.amount } : i) }))
@@ -305,8 +287,15 @@ export default function Finance({ state, setState }) {
   monthExpenses.forEach(e => { if (byCat[e.cat] !== undefined) byCat[e.cat] += e.cost })
   const maxCatVal = Math.max(...CATS.map(c => byCat[c]))
 
+  const monthHeading = monthFilter === 'all'
+    ? String(new Date().getFullYear())
+    : `${MONTH_NAMES[parseInt(monthFilter) - 1]} ${new Date().getFullYear()}`
+
   return (
     <div className="panel">
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text1)', letterSpacing: '-0.3px' }}>{monthHeading}</div>
+      </div>
       {/* Top stat cards */}
       <div className="finance-top">
         <div className="stat-card">
@@ -361,7 +350,7 @@ export default function Finance({ state, setState }) {
                     <th style={{ width: '72px' }}>Category</th>
                     <th>Details</th>
                     <th style={{ width: '80px', textAlign: 'right' }}>Cost</th>
-                    <th style={{ width: '120px' }}>Type</th>
+                    <th style={{ width: '150px' }}>Type</th>
                     <th style={{ width: '30px' }}></th>
                   </tr>
                 </thead>
@@ -425,26 +414,29 @@ export default function Finance({ state, setState }) {
                           onKeyDown={ev => { if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur() } if (ev.key === 'Escape') { ev.currentTarget.textContent = e.detail; ev.currentTarget.blur() } }}
                         >{e.detail}</td>
                         <td style={{ textAlign: 'right' }}>
-                          <span suppressContentEditableWarning contentEditable className={`cost-cell ${cls}`} style={{ cursor: 'text' }}
-                            onKeyDown={ev => {
-                              if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur(); return }
-                              if (ev.key === 'Escape') { ev.currentTarget.textContent = e.cost.toFixed(2); ev.currentTarget.blur(); return }
-                              if (ev.ctrlKey || ev.metaKey) return
-                              if (/^(Arrow|Backspace|Delete|Tab|Home|End)/.test(ev.key)) return
-                              if (!/^\d$/.test(ev.key) && ev.key !== '.') { ev.preventDefault(); return }
-                              if (ev.key === '.' && ev.currentTarget.textContent.includes('.')) ev.preventDefault()
-                            }}
-                            onBlur={ev => {
-                              const v = parseFloat(ev.currentTarget.textContent.trim())
-                              if (!isNaN(v) && v >= 0) {
-                                const rounded = Math.round(v * 100) / 100
-                                ev.currentTarget.textContent = rounded.toFixed(2)
-                                if (rounded !== e.cost) setState(prev => ({ ...prev, expenses: prev.expenses.map(x => x.id === e.id ? { ...x, cost: rounded } : x) }))
-                              } else {
-                                ev.currentTarget.textContent = e.cost.toFixed(2)
-                              }
-                            }}
-                          >{e.cost.toFixed(2)}</span>
+                          <span className={`cost-cell ${cls}`} style={{ cursor: 'text' }}>
+                            <span style={{ pointerEvents: 'none', userSelect: 'none' }}>$</span>
+                            <span suppressContentEditableWarning contentEditable style={{ outline: 'none' }}
+                              onKeyDown={ev => {
+                                if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur(); return }
+                                if (ev.key === 'Escape') { ev.currentTarget.textContent = e.cost.toFixed(2); ev.currentTarget.blur(); return }
+                                if (ev.ctrlKey || ev.metaKey) return
+                                if (/^(Arrow|Backspace|Delete|Tab|Home|End)/.test(ev.key)) return
+                                if (!/^\d$/.test(ev.key) && ev.key !== '.') { ev.preventDefault(); return }
+                                if (ev.key === '.' && ev.currentTarget.textContent.includes('.')) ev.preventDefault()
+                              }}
+                              onBlur={ev => {
+                                const v = parseFloat(ev.currentTarget.textContent.trim())
+                                if (!isNaN(v) && v >= 0) {
+                                  const rounded = Math.round(v * 100) / 100
+                                  ev.currentTarget.textContent = rounded.toFixed(2)
+                                  if (rounded !== e.cost) setState(prev => ({ ...prev, expenses: prev.expenses.map(x => x.id === e.id ? { ...x, cost: rounded } : x) }))
+                                } else {
+                                  ev.currentTarget.textContent = e.cost.toFixed(2)
+                                }
+                              }}
+                            >{e.cost.toFixed(2)}</span>
+                          </span>
                         </td>
                         <td>{badge}</td>
                         <td><button className="del-btn" onClick={() => deleteExpense(e.id)}>×</button></td>
@@ -457,7 +449,7 @@ export default function Finance({ state, setState }) {
 
             {/* Add expense row */}
             <div style={{ padding: '10px 16px', borderTop: '2px solid var(--border)', background: 'var(--surface2)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '52px 72px 1fr 70px 120px 30px', gap: '5px', alignItems: 'center', marginBottom: '6px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '52px 72px 1fr 70px 150px 30px', gap: '5px', alignItems: 'center', marginBottom: '6px' }}>
                 <input className="form-input" type="date" value={newDate} onChange={e => setNewDate(e.target.value)} style={{ fontSize: '11px', padding: '4px 5px' }} />
                 <select className="form-select" value={newCat} onChange={e => setNewCat(e.target.value)} style={{ fontSize: '11px', padding: '4px 5px', width: '100%' }}>
                   {CATS.map(c => <option key={c}>{c}</option>)}
@@ -466,7 +458,7 @@ export default function Finance({ state, setState }) {
                 <input className="form-input" type="number" placeholder="0.00" step="0.01" value={newCost} onChange={e => setNewCost(e.target.value)} style={{ fontSize: '12px', padding: '4px 7px', textAlign: 'right' }} />
                 <select className="form-select" value={newType} onChange={e => { setNewType(e.target.value); setNameFieldVisible(e.target.value !== 'normal') }} style={{ fontSize: '11px', padding: '4px 5px', width: '100%' }}>
                   <option value="normal">Normal</option>
-                  <option value="paid">p/ Paid with someone</option>
+                  <option value="paid">p/ Paid aswell</option>
                   <option value="for">f/ Bought for someone</option>
                 </select>
                 <button onClick={addExpense} style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '16px', height: '30px', width: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
@@ -549,15 +541,34 @@ export default function Finance({ state, setState }) {
           <div className="overview-box">
             <div className="overview-box-hdr"><h3>Income</h3></div>
             {monthIncome.map(i => (
-              <div key={i.id} className="overview-row" style={{ gap: '8px', cursor: 'pointer' }} onClick={() => { setEditingIncomeId(null); setIncomeModal({ ...i }) }}>
+              <div key={i.id} className="overview-row" style={{ gap: '8px', cursor: 'pointer' }} onClick={() => setIncomeModal({ ...i })}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '12px', fontWeight: 500 }}>{i.source}{i.salary ? ' (Salary)' : ''}</div>
                   <div style={{ fontSize: '10px', color: 'var(--text3)' }}>{i.date}</div>
                 </div>
-                {editingIncomeId === i.id
-                  ? <input type="number" value={editIncomeValue} onChange={ev => setEditIncomeValue(ev.target.value)} onBlur={commitIncomeEdit} onKeyDown={ev => { if (ev.key === 'Enter') commitIncomeEdit(); if (ev.key === 'Escape') { setEditingIncomeId(null); setEditIncomeValue('') } }} autoFocus step="0.01" onClick={ev => ev.stopPropagation()} style={{ width: '80px', fontFamily: "'DM Mono', monospace", fontSize: '12px', color: 'var(--green)', border: 'none', outline: 'none', background: 'transparent', padding: 0, textAlign: 'right' }} />
-                  : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', color: 'var(--green)' }}>${i.amount.toFixed(2)}</span>
-                }
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', color: 'var(--green)' }} onClick={ev => ev.stopPropagation()}>
+                  <span style={{ pointerEvents: 'none', userSelect: 'none' }}>$</span>
+                  <span suppressContentEditableWarning contentEditable style={{ outline: 'none', cursor: 'text' }}
+                    onKeyDown={ev => {
+                      if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur(); return }
+                      if (ev.key === 'Escape') { ev.currentTarget.textContent = i.amount.toFixed(2); ev.currentTarget.blur(); return }
+                      if (ev.ctrlKey || ev.metaKey) return
+                      if (/^(Arrow|Backspace|Delete|Tab|Home|End)/.test(ev.key)) return
+                      if (!/^\d$/.test(ev.key) && ev.key !== '.') { ev.preventDefault(); return }
+                      if (ev.key === '.' && ev.currentTarget.textContent.includes('.')) ev.preventDefault()
+                    }}
+                    onBlur={ev => {
+                      const v = parseFloat(ev.currentTarget.textContent.trim())
+                      if (!isNaN(v) && v >= 0) {
+                        const rounded = Math.round(v * 100) / 100
+                        ev.currentTarget.textContent = rounded.toFixed(2)
+                        if (rounded !== i.amount) setState(prev => ({ ...prev, income: prev.income.map(x => x.id === i.id ? { ...x, amount: rounded } : x) }))
+                      } else {
+                        ev.currentTarget.textContent = i.amount.toFixed(2)
+                      }
+                    }}
+                  >{i.amount.toFixed(2)}</span>
+                </span>
                 <button className="del-btn" onClick={ev => { ev.stopPropagation(); deleteIncome(i.id) }}>×</button>
               </div>
             ))}
