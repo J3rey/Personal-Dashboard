@@ -8,12 +8,16 @@ const STATUSES = ['Idea', 'Scripted', 'Filmed', 'Edited', 'Posted']
 
 function AutoTextarea({ value, onBlur, placeholder }) {
   const ref = useRef(null)
-  useEffect(() => {
+
+  function resize() {
     if (ref.current) {
       ref.current.style.height = 'auto'
       ref.current.style.height = ref.current.scrollHeight + 'px'
     }
-  }, [value])
+  }
+
+  useEffect(resize, [value])
+
   return (
     <textarea
       ref={ref}
@@ -21,36 +25,74 @@ function AutoTextarea({ value, onBlur, placeholder }) {
       rows={1}
       placeholder={placeholder}
       defaultValue={value}
+      onInput={resize}
+      style={{ resize: 'none', overflow: 'hidden' }}
       onBlur={e => onBlur(e.target.value)}
       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur() } }}
     />
   )
 }
 
-function ContentRow({ c, pillars, onStatusChange, onNoteChange, onDelete }) {
+function ContentRow({ c, pillars, onStatusChange, onNoteChange, onDelete, onDragStart, onDrop, allowDrag }) {
   const [editingIdea, setEditingIdea] = useState(false)
   const [ideaVal, setIdeaVal] = useState(c.idea)
+  const [dragOver, setDragOver] = useState(false)
+  const ideaRef = useRef(null)
   const p = pillars.find(x => x.id === c.pillarId)
   const col = p ? PILLAR_COLORS[p.colorIdx] || PILLAR_COLORS[0] : { bg: 'var(--surface2)', text: 'var(--text2)' }
   const statusCls = `status-${c.status.toLowerCase()}`
 
+  useEffect(() => {
+    if (editingIdea && ideaRef.current) {
+      ideaRef.current.focus()
+      ideaRef.current.style.height = 'auto'
+      ideaRef.current.style.height = ideaRef.current.scrollHeight + 'px'
+    }
+  }, [editingIdea])
+
+  const isDraggable = allowDrag && !editingIdea
+
   return (
-    <tr className={c.status === 'Posted' ? 'posted-row' : ''}>
+    <tr
+      className={c.status === 'Posted' ? 'posted-row' : ''}
+      draggable={isDraggable}
+      style={{
+        cursor: isDraggable ? 'grab' : 'default',
+        boxShadow: dragOver ? 'inset 0 -2px 0 var(--accent)' : 'none',
+      }}
+      onDragStart={e => { if (!isDraggable) return; e.dataTransfer.effectAllowed = 'move'; onDragStart(c.id) }}
+      onDragOver={e => { if (!allowDrag) return; e.preventDefault(); setDragOver(true) }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={e => { e.preventDefault(); setDragOver(false); onDrop(c.id) }}
+    >
       <td style={{ fontSize: '13px' }}>
         {editingIdea ? (
-          <input
+          <textarea
+            ref={ideaRef}
             className="inline-edit"
             value={ideaVal}
-            autoFocus
-            onChange={e => setIdeaVal(e.target.value)}
+            rows={1}
+            style={{ resize: 'none', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}
+            onChange={e => { setIdeaVal(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
             onBlur={() => { if (ideaVal.trim()) onStatusChange(c.id, 'idea', ideaVal.trim()); setEditingIdea(false) }}
             onKeyDown={e => {
-              if (e.key === 'Enter') e.target.blur()
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur() }
               if (e.key === 'Escape') { setIdeaVal(c.idea); setEditingIdea(false) }
             }}
           />
         ) : (
-          <span className="editable-cell" onDoubleClick={() => { setIdeaVal(c.idea); setEditingIdea(true) }}>{c.idea}</span>
+          <span style={{ display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
+            {allowDrag && (
+              <span style={{ color: 'var(--text3)', fontSize: '13px', lineHeight: 1.4, cursor: 'grab', flexShrink: 0, userSelect: 'none' }}>⠿</span>
+            )}
+            <span
+              className="editable-cell"
+              style={{ cursor: 'text', flex: 1, whiteSpace: 'pre-wrap' }}
+              onClick={() => { setIdeaVal(c.idea); setEditingIdea(true) }}
+            >
+              {c.idea}
+            </span>
+          </span>
         )}
       </td>
       <td>
@@ -81,6 +123,9 @@ export default function Content({ state, setState }) {
   const [newStatus, setNewStatus] = useState('Idea')
   const [newNotes, setNewNotes]   = useState('')
   const newNotesRef = useRef(null)
+  const newIdeaRef = useRef(null)
+
+  const dragSrcId = useRef(null)
 
   function setFilter(f) {
     setState(prev => ({ ...prev, contentFilter: f }))
@@ -101,10 +146,30 @@ export default function Content({ state, setState }) {
     if (!newIdea.trim()) return
     setState(prev => ({
       ...prev,
-      content: [{ id: uid(), idea: newIdea.trim(), pillarId: parseInt(newPillar), status: newStatus, notes: newNotes }, ...prev.content],
+      content: [...prev.content, { id: uid(), idea: newIdea.trim(), pillarId: parseInt(newPillar), status: newStatus, notes: newNotes }],
     }))
-    setNewIdea(''); setNewNotes('')
-    if (newNotesRef.current) { newNotesRef.current.style.height = 'auto' }
+    setNewIdea('')
+    setNewNotes('')
+    if (newIdeaRef.current) newIdeaRef.current.style.height = 'auto'
+    if (newNotesRef.current) newNotesRef.current.style.height = 'auto'
+  }
+
+  function handleDragStart(id) {
+    dragSrcId.current = id
+  }
+
+  function handleDrop(targetId) {
+    if (dragSrcId.current == null || dragSrcId.current === targetId) return
+    setState(prev => {
+      const items = [...prev.content]
+      const srcIdx = items.findIndex(x => x.id === dragSrcId.current)
+      const tgtIdx = items.findIndex(x => x.id === targetId)
+      if (srcIdx === -1 || tgtIdx === -1) return prev
+      const [removed] = items.splice(srcIdx, 1)
+      items.splice(tgtIdx, 0, removed)
+      return { ...prev, content: items }
+    })
+    dragSrcId.current = null
   }
 
   function savePillar() {
@@ -182,6 +247,9 @@ export default function Content({ state, setState }) {
                 onStatusChange={updateContent}
                 onNoteChange={(id, val) => updateContent(id, 'notes', val)}
                 onDelete={deleteContent}
+                onDragStart={handleDragStart}
+                onDrop={handleDrop}
+                allowDrag
               />
             ))}
           </tbody>
@@ -215,6 +283,9 @@ export default function Content({ state, setState }) {
                   onStatusChange={updateContent}
                   onNoteChange={(id, val) => updateContent(id, 'notes', val)}
                   onDelete={deleteContent}
+                  onDragStart={handleDragStart}
+                  onDrop={handleDrop}
+                  allowDrag={false}
                 />
               ))}
             </tbody>
@@ -223,13 +294,15 @@ export default function Content({ state, setState }) {
 
         {/* Add row */}
         <div className="add-content-row">
-          <input
+          <textarea
+            ref={newIdeaRef}
             className="form-input"
             placeholder="Reel idea..."
             value={newIdea}
-            onChange={e => setNewIdea(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addContentRow()}
-            style={{ fontSize: '12px', padding: '5px 8px' }}
+            rows={1}
+            onChange={e => { setNewIdea(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addContentRow() } }}
+            style={{ fontSize: '12px', padding: '5px 8px', resize: 'none', overflow: 'hidden' }}
           />
           <select className="form-select" value={newPillar} onChange={e => setNewPillar(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px' }}>
             {state.pillars.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -272,9 +345,10 @@ export default function Content({ state, setState }) {
               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>New Pillar Name</label>
               <input
                 className="form-input"
-                placeholder="e.g. DITL"
+                placeholder="e.g. Vlog, Tutorial, Story..."
                 value={newPillarName}
                 onChange={e => setNewPillarName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') savePillar() }}
                 style={{ fontSize: '13px', marginBottom: '8px' }}
               />
               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>Colour</label>
