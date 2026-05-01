@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Doughnut, Bar } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -26,24 +26,23 @@ function getCostClass(cost, allCosts) {
   return pct >= 0.66 ? 'cost-high' : pct >= 0.33 ? 'cost-mid' : 'cost-low'
 }
 
-function createCentrePlugin(total) {
-  return {
-    id: 'ctr',
-    beforeDraw(chart) {
-      const { ctx, chartArea: { left, right, top, bottom } } = chart
-      const cx = (left + right) / 2, cy = (top + bottom) / 2
-      ctx.save()
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillStyle = '#9c9990'
-      ctx.font = '11px DM Sans'
-      ctx.fillText('total', cx, cy - 10)
-      ctx.fillStyle = '#1a1a18'
-      ctx.font = '600 17px DM Sans'
-      ctx.fillText('$' + total.toFixed(0), cx, cy + 8)
-      ctx.restore()
-    },
-  }
+const centrePlugin = {
+  id: 'ctr',
+  beforeDraw(chart) {
+    const { ctx, chartArea: { left, right, top, bottom } } = chart
+    const cx = (left + right) / 2, cy = (top + bottom) / 2
+    const total = (chart.data.datasets[0]?.data ?? []).reduce((s, v) => s + v, 0)
+    ctx.save()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#9c9990'
+    ctx.font = '11px DM Sans'
+    ctx.fillText('total', cx, cy - 10)
+    ctx.fillStyle = '#1a1a18'
+    ctx.font = '600 17px DM Sans'
+    ctx.fillText('$' + total.toFixed(0), cx, cy + 8)
+    ctx.restore()
+  },
 }
 
 export default function Finance({ state, setState }) {
@@ -76,6 +75,17 @@ export default function Finance({ state, setState }) {
   const [currResult, setCurrResult] = useState('')
 
   const [incomeModal, setIncomeModal] = useState(null)
+
+  useEffect(() => {
+    const today = new Date()
+    const y = yearFilter
+    const m = monthFilter === 'all'
+      ? (y === today.getFullYear() ? today.getMonth() + 1 : 1)
+      : parseInt(monthFilter)
+    const isCurrentPeriod = y === today.getFullYear() && m === today.getMonth() + 1
+    const d = isCurrentPeriod ? today.getDate() : 1
+    setNewDate(`${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+  }, [yearFilter, monthFilter])
 
   function toggleFilter(cat) {
     setActiveFilters(prev =>
@@ -502,7 +512,7 @@ export default function Finance({ state, setState }) {
                   {monthFilter === 'all' ? 'Category Breakdown — All Year' : `Category Breakdown — ${MONTH_NAMES[parseInt(monthFilter) - 1]}`}
                 </div>
                 <div style={{ position: 'relative', height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Doughnut data={chartData.donutData} options={chartData.donutOptions} plugins={[createCentrePlugin(chartData.total)]} />
+                  <Doughnut data={chartData.donutData} options={chartData.donutOptions} plugins={[centrePlugin]} />
                 </div>
                 <div className="chart-legend">
                   {CATS.filter(c => (chartData.catTotals[c] || 0) > 0).map(c => (
