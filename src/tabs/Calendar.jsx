@@ -1,15 +1,228 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 let _nextId = 100
 const uid = () => _nextId++
 
 const CAT_DOT = { google: 'var(--blue)', personal: 'var(--green)', work: 'var(--purple)' }
+const CATS_LIST = [
+  { value: 'personal', label: 'Personal', color: 'var(--green)',  bg: 'var(--green-light)'  },
+  { value: 'work',     label: 'Work',     color: 'var(--purple)', bg: 'var(--purple-light)' },
+  { value: 'google',   label: 'Study',    color: 'var(--blue)',   bg: 'var(--blue-light)'   },
+]
+
+const HOUR_H  = 56   // px per hour
+const START_H = 6    // first visible hour (6 AM)
+const END_H   = 22   // last visible hour (10 PM)
+const HOURS   = Array.from({ length: END_H - START_H }, (_, i) => i + START_H)
 
 function toDs(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function MonthView({ calViewDate, events, onSelectDay }) {
+function formatDateLabel(ds) {
+  return new Date(ds + 'T12:00:00').toLocaleDateString('en-AU', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  })
+}
+
+function hLabel(h) {
+  if (h === 0)  return '12 AM'
+  if (h < 12)   return `${h} AM`
+  if (h === 12) return '12 PM'
+  return `${h - 12} PM`
+}
+
+function calcPos(e) {
+  const [sh, sm] = e.start.split(':').map(Number)
+  const startMin = sh * 60 + sm
+  let endMin = startMin + 60
+  if (e.end) { const [eh, em] = e.end.split(':').map(Number); endMin = eh * 60 + em }
+  return {
+    top:    (startMin - START_H * 60) * (HOUR_H / 60),
+    height: Math.max((endMin - startMin) * (HOUR_H / 60), 22),
+  }
+}
+
+// ── Event detail popover ───────────────────────────────────────────────────────
+function EventPopup({ event, x, y, onClose, onDelete }) {
+  const ref = useRef(null)
+  const cat = CATS_LIST.find(c => c.value === event.cat)
+
+  useEffect(() => {
+    function onMouse(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    // delay so the opening click doesn't immediately close
+    const t = setTimeout(() => document.addEventListener('mousedown', onMouse), 0)
+    window.addEventListener('keydown', onKey)
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', onMouse); window.removeEventListener('keydown', onKey) }
+  }, [])
+
+  // smart positioning — flip if too close to edge
+  const W = 268, H = 200
+  const left = x + W + 16 > window.innerWidth  ? x - W - 8 : x + 12
+  const top  = y + H      > window.innerHeight ? window.innerHeight - H - 12 : y
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'fixed', left, top, zIndex: 2000,
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: '13px', width: `${W}px`,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06)',
+        animation: 'slideUp 0.14s ease',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Colour header band */}
+      <div style={{ height: '5px', background: cat?.color || 'var(--accent)' }} />
+
+      <div style={{ padding: '14px 16px 16px' }}>
+        {/* Title row */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px', gap: '8px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', lineHeight: 1.3 }}>{event.title}</div>
+          <button
+            onClick={onClose}
+            style={{ background: 'var(--surface2)', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer', color: 'var(--text2)', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+          >×</button>
+        </div>
+
+        {/* Date */}
+        <div style={{ fontSize: '12px', color: 'var(--text2)', marginBottom: '4px' }}>
+          {new Date(event.date + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </div>
+
+        {/* Time */}
+        <div style={{ fontSize: '12px', color: 'var(--text2)', marginBottom: '10px' }}>
+          {event.start ? `${event.start}${event.end ? ` – ${event.end}` : ''}` : 'All day'}
+        </div>
+
+        {/* Notes */}
+        {event.notes && (
+          <div style={{ fontSize: '12px', color: 'var(--text2)', background: 'var(--surface2)', borderRadius: '7px', padding: '8px 10px', marginBottom: '10px', lineHeight: 1.5 }}>
+            {event.notes}
+          </div>
+        )}
+
+        {/* Category chip */}
+        <div style={{ marginBottom: '12px' }}>
+          <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '10px', background: cat?.bg || 'var(--surface2)', color: cat?.color || 'var(--text3)', fontWeight: 500 }}>
+            {cat?.label || event.cat}
+          </span>
+        </div>
+
+        {/* Actions */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => onDelete(event.id)}
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '5px 12px', cursor: 'pointer', fontSize: '12px', color: 'var(--red)', transition: 'all 0.1s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#fff0f0'; e.currentTarget.style.borderColor = 'var(--red)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = 'var(--border)' }}
+          >Delete</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Create-event modal ─────────────────────────────────────────────────────────
+function CreateEventModal({ date, onClose, onSave }) {
+  const [title, setTitle]     = useState('')
+  const [allDay, setAllDay]   = useState(false)
+  const [start, setStart]     = useState('09:00')
+  const [end, setEnd]         = useState('10:00')
+  const [cat, setCat]         = useState('personal')
+  const [notes, setNotes]     = useState('')
+  const [shaking, setShaking] = useState(false)
+  const titleRef = useRef(null)
+
+  useEffect(() => {
+    titleRef.current?.focus()
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  function handleSave() {
+    if (!title.trim()) {
+      setShaking(true); setTimeout(() => setShaking(false), 350)
+      titleRef.current?.focus(); return
+    }
+    onSave({ title: title.trim(), date, start: allDay ? '' : start, end: allDay ? '' : end, cat, notes })
+  }
+
+  const selectedCat = CATS_LIST.find(c => c.value === cat)
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.15s ease' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '18px', padding: '28px', width: '400px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', animation: 'slideUp 0.18s cubic-bezier(0.34,1.2,0.64,1)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '22px' }}>
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.3px' }}>New Event</div>
+            <div style={{ fontSize: '12px', color: 'var(--text3)', marginTop: '3px' }}>{formatDateLabel(date)}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'var(--surface2)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer', fontSize: '15px', color: 'var(--text2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+        </div>
+
+        <div className={shaking ? 'modal-shake' : ''} style={{ marginBottom: '14px' }}>
+          <input ref={titleRef} className="form-input" placeholder="Event title" value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSave() }} style={{ fontSize: '15px', padding: '9px 13px', fontWeight: 500 }} />
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text2)', marginBottom: '14px', cursor: 'pointer', userSelect: 'none' }}>
+          <input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} style={{ accentColor: 'var(--accent)', width: '14px', height: '14px' }} />
+          All day
+        </label>
+
+        {!allDay && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+            {[['Start', start, setStart], ['End', end, setEnd]].map(([lbl, val, set]) => (
+              <div key={lbl}>
+                <div style={{ fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '5px' }}>{lbl}</div>
+                <input className="form-input" type="time" value={val} onChange={e => set(e.target.value)} style={{ fontSize: '13px', padding: '7px 10px' }} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Category</div>
+          <div style={{ display: 'flex', gap: '7px' }}>
+            {CATS_LIST.map(c => {
+              const active = cat === c.value
+              return (
+                <button key={c.value} onClick={() => setCat(c.value)} style={{ padding: '6px 14px', borderRadius: '20px', border: `1.5px solid ${active ? c.color : 'var(--border)'}`, background: active ? c.bg : 'transparent', color: active ? c.color : 'var(--text2)', fontSize: '12px', fontWeight: active ? 600 : 400, cursor: 'pointer', transition: 'all 0.12s', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: active ? c.color : 'var(--border2)', flexShrink: 0 }} />
+                  {c.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '5px' }}>Notes</div>
+          <input className="form-input" placeholder="Add a note..." value={notes} onChange={e => setNotes(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSave() }} style={{ fontSize: '12px', padding: '7px 11px' }} />
+        </div>
+
+        <div style={{ height: '3px', borderRadius: '2px', background: selectedCat?.color || 'var(--accent)', marginBottom: '20px', opacity: 0.7, transition: 'background 0.15s' }} />
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn-ghost" onClick={onClose} style={{ flex: 1, padding: '9px 0', fontSize: '13px' }}>Cancel</button>
+          <button onClick={handleSave} style={{ flex: 2, padding: '9px 0', fontSize: '13px', fontWeight: 600, background: selectedCat?.color || 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+            Add Event
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Month View ────────────────────────────────────────────────────────────────
+function MonthView({ calViewDate, events, onSelectDay, onSelectEvent }) {
   const today = new Date()
   const todayStr = toDs(today)
   const y = calViewDate.getFullYear(), m = calViewDate.getMonth()
@@ -17,16 +230,10 @@ function MonthView({ calViewDate, events, onSelectDay }) {
   const daysInMonth = new Date(y, m + 1, 0).getDate()
 
   const cells = []
-  for (let i = 0; i < firstDay; i++) {
-    cells.push({ d: new Date(y, m, 1 - firstDay + i), other: true })
-  }
-  for (let day = 1; day <= daysInMonth; day++) {
-    cells.push({ d: new Date(y, m, day), other: false })
-  }
+  for (let i = 0; i < firstDay; i++) cells.push({ d: new Date(y, m, 1 - firstDay + i), other: true })
+  for (let day = 1; day <= daysInMonth; day++) cells.push({ d: new Date(y, m, day), other: false })
   const rem = (7 - ((firstDay + daysInMonth) % 7)) % 7
-  for (let i = 1; i <= rem; i++) {
-    cells.push({ d: new Date(y, m + 1, i), other: true })
-  }
+  for (let i = 1; i <= rem; i++) cells.push({ d: new Date(y, m + 1, i), other: true })
 
   return (
     <div className="cal-grid">
@@ -38,20 +245,18 @@ function MonthView({ calViewDate, events, onSelectDay }) {
         const isToday = ds === todayStr
         const evs = events.filter(e => e.date === ds)
         return (
-          <div
-            key={i}
-            className={`cal-cell${cell.other ? ' other-month' : ''}${isToday ? ' today' : ''}`}
-            onClick={() => onSelectDay(ds)}
-          >
+          <div key={i} className={`cal-cell${cell.other ? ' other-month' : ''}${isToday ? ' today' : ''}`} onClick={() => onSelectDay(ds)}>
             <div className="cal-date">{cell.d.getDate()}</div>
             {evs.slice(0, 3).map(e => (
-              <div key={e.id} className={`cal-event ${e.cat}`}>
+              <div
+                key={e.id}
+                className={`cal-event ${e.cat}`}
+                onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}
+              >
                 {e.start ? e.start + ' ' : ''}{e.title}
               </div>
             ))}
-            {evs.length > 3 && (
-              <div style={{ fontSize: '9px', color: 'var(--text3)' }}>+{evs.length - 3} more</div>
-            )}
+            {evs.length > 3 && <div style={{ fontSize: '9px', color: 'var(--text3)' }}>+{evs.length - 3} more</div>}
           </div>
         )
       })}
@@ -59,102 +264,179 @@ function MonthView({ calViewDate, events, onSelectDay }) {
   )
 }
 
-function WeekView({ calViewDate, events, onSelectDay }) {
-  const today = new Date()
+// ── Week View ─────────────────────────────────────────────────────────────────
+function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
+  const today    = new Date()
   const todayStr = toDs(today)
-  const d = calViewDate, day = (d.getDay() + 6) % 7
-  const mon = new Date(d)
-  mon.setDate(d.getDate() - day)
-  const dates = Array.from({ length: 7 }, (_, i) => {
-    const x = new Date(mon)
-    x.setDate(mon.getDate() + i)
-    return x
-  })
-  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const d        = calViewDate
+  const mon      = new Date(d)
+  mon.setDate(d.getDate() - (d.getDay() + 6) % 7)
+  const dates     = Array.from({ length: 7 }, (_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return x })
+  const dayLabels = ['MON','TUE','WED','THU','FRI','SAT','SUN']
 
-  function hLabel(h) {
-    return h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`
-  }
+  const nowMin     = today.getHours() * 60 + today.getMinutes()
+  const nowTop     = (nowMin - START_H * 60) * (HOUR_H / 60)
+  const nowVisible = nowMin >= START_H * 60 && nowMin < END_H * 60
+
+  const allDayMap = {}
+  dates.forEach(dt => { const ds = toDs(dt); allDayMap[ds] = events.filter(e => e.date === ds && !e.start) })
+  const hasAllDay = dates.some(dt => allDayMap[toDs(dt)].length > 0)
 
   return (
-    <div className="week-grid">
-      <div className="week-time-col" style={{ padding: '8px 0', textAlign: 'center', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.4px', background: 'var(--surface2)', borderRight: '1px solid var(--border)' }}>
-        Time
+    <div className="gcal-wrap">
+      {/* Sticky day headers */}
+      <div className="gcal-hdr">
+        <div className="gcal-gutter" />
+        {dates.map((dt, i) => {
+          const isT = toDs(dt) === todayStr
+          return (
+            <div key={i} className="gcal-col-hdr">
+              <span className="gcal-col-hdr-day">{dayLabels[i]}</span>
+              <span className={'gcal-col-hdr-num' + (isT ? ' is-today' : '')}>{dt.getDate()}</span>
+            </div>
+          )
+        })}
       </div>
-      {dates.map((dt, i) => {
-        const ds = toDs(dt)
-        const isT = ds === todayStr
-        return (
-          <div key={i} className="week-day-hdr">
-            <div className="week-day-hdr-label">{dayLabels[i]}</div>
-            <div className={'week-day-hdr-num' + (isT ? ' today-num' : '')}>{dt.getDate()}</div>
-          </div>
-        )
-      })}
-      {Array.from({ length: 16 }, (_, idx) => idx + 6).map(h => (
-        <>
-          <div key={`t${h}`} className="week-time-slot">
-            <span className="week-time-label">{hLabel(h)}</span>
-          </div>
+
+      {/* All-day strip */}
+      {hasAllDay && (
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--surface2)' }}>
+          <div className="gcal-gutter gcal-allday-label">all‑day</div>
           {dates.map((dt, i) => {
             const ds = toDs(dt)
-            const evs = events.filter(e => e.date === ds && e.start && parseInt(e.start.split(':')[0]) === h)
             return (
-              <div key={`${h}-${i}`} className="week-day-slot" onClick={() => onSelectDay(ds)}>
-                {evs.map(e => (
-                  <div key={e.id} className={`week-event ${e.cat}`}>{e.title}</div>
+              <div key={i} style={{ flex: 1, borderLeft: '1px solid var(--border)', padding: '3px 3px', display: 'flex', flexWrap: 'wrap', gap: '2px', minHeight: '26px' }}>
+                {allDayMap[ds].map(e => (
+                  <div key={e.id} className={`gcal-allday-chip gcal-ev-${e.cat}`}
+                    onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
+                    {e.title}
+                  </div>
                 ))}
               </div>
             )
           })}
-        </>
-      ))}
-    </div>
-  )
-}
-
-function DayView({ calViewDate, events }) {
-  const ds = toDs(calViewDate)
-  const allDay = events.filter(e => e.date === ds && (!e.start || e.start === ''))
-
-  function hLabel(h) {
-    return h < 12 ? `${h}:00am` : h === 12 ? '12:00pm' : `${h - 12}:00pm`
-  }
-
-  return (
-    <div className="day-grid">
-      {allDay.length > 0 && (
-        <div style={{ padding: '8px 12px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', fontSize: '12px', color: 'var(--text2)' }}>
-          <span style={{ fontWeight: 500 }}>All day:</span> {allDay.map(e => e.title).join(', ')}
         </div>
       )}
-      {Array.from({ length: 16 }, (_, idx) => idx + 6).map(h => {
-        const evs = events.filter(e => e.date === ds && e.start && parseInt(e.start.split(':')[0]) === h)
-        return (
-          <div key={h} className="day-hour-row">
-            <div className="day-hour-label">{hLabel(h)}</div>
-            <div className="day-hour-cell">
-              {evs.map(e => (
-                <div key={e.id} className={`day-event-pill ${e.cat}`}>
-                  {e.start} {e.title}{e.notes ? ` — ${e.notes}` : ''}
-                </div>
-              ))}
+
+      {/* Scrollable body */}
+      <div className="gcal-body">
+        <div className="gcal-time-col">
+          {HOURS.map((h, idx) => (
+            <div key={h} className="gcal-hour-label" style={{ height: HOUR_H }}>
+              {idx > 0 ? hLabel(h) : ''}
             </div>
-          </div>
-        )
-      })}
+          ))}
+        </div>
+
+        {dates.map((dt, i) => {
+          const ds   = toDs(dt)
+          const isT  = ds === todayStr
+          const evs  = events.filter(e => e.date === ds && e.start)
+          return (
+            <div key={i} className={'gcal-day-col' + (isT ? ' gcal-today-col' : '')} onClick={() => onSelectDay(ds)}>
+              {HOURS.map(h => <div key={h} className="gcal-hour-line" style={{ height: HOUR_H }} />)}
+              {isT && nowVisible && (
+                <div className="gcal-now-line" style={{ top: nowTop }}><div className="gcal-now-dot" /></div>
+              )}
+              {evs.map(e => {
+                const { top, height } = calcPos(e)
+                return (
+                  <div key={e.id} className={`gcal-event gcal-ev-${e.cat}`} style={{ top, height }}
+                    onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
+                    <div className="gcal-ev-title">{e.title}</div>
+                    {height > 34 && <div className="gcal-ev-time">{e.start}{e.end ? `–${e.end}` : ''}</div>}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
 
-export default function Calendar({ state, setState }) {
-  const [calView, setCalView] = useState('month')
-  const [calViewDate, setCalViewDate] = useState(new Date())
-  const [form, setForm] = useState({
-    title: '', date: toDs(new Date()), start: '', end: '', cat: 'personal', notes: ''
-  })
+// ── Day View ──────────────────────────────────────────────────────────────────
+function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
+  const ds      = toDs(calViewDate)
+  const today   = new Date()
+  const isToday = ds === toDs(today)
+  const allDay  = events.filter(e => e.date === ds && !e.start)
+  const timed   = events.filter(e => e.date === ds && e.start)
 
-  const today = new Date()
+  const nowMin     = today.getHours() * 60 + today.getMinutes()
+  const nowTop     = (nowMin - START_H * 60) * (HOUR_H / 60)
+  const nowVisible = isToday && nowMin >= START_H * 60 && nowMin < END_H * 60
+
+  return (
+    <div className="gcal-wrap">
+      {/* Day header */}
+      <div className="gcal-hdr" style={{ cursor: 'default' }}>
+        <div className="gcal-gutter" />
+        <div className="gcal-col-hdr" style={{ flex: 1 }}>
+          <span className="gcal-col-hdr-day">
+            {calViewDate.toLocaleDateString('en-AU', { weekday: 'long' }).toUpperCase()}
+          </span>
+          <span className={'gcal-col-hdr-num' + (isToday ? ' is-today' : '')} style={{ fontSize: '24px', width: '40px', height: '40px' }}>
+            {calViewDate.getDate()}
+          </span>
+        </div>
+      </div>
+
+      {/* All-day strip */}
+      {allDay.length > 0 && (
+        <div className="gcal-allday-strip">
+          <div className="gcal-gutter gcal-allday-label">all‑day</div>
+          <div className="gcal-allday-events">
+            {allDay.map(e => (
+              <div key={e.id} className={`gcal-allday-chip gcal-ev-${e.cat}`}
+                onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
+                {e.title}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scrollable body */}
+      <div className="gcal-body">
+        <div className="gcal-time-col">
+          {HOURS.map((h, idx) => (
+            <div key={h} className="gcal-hour-label" style={{ height: HOUR_H }}>
+              {idx > 0 ? hLabel(h) : ''}
+            </div>
+          ))}
+        </div>
+        <div className="gcal-day-col gcal-day-col--single" style={{ flex: 1 }} onClick={() => onSelectDay(ds)}>
+          {HOURS.map(h => <div key={h} className="gcal-hour-line" style={{ height: HOUR_H }} />)}
+          {nowVisible && (
+            <div className="gcal-now-line" style={{ top: nowTop }}><div className="gcal-now-dot" /></div>
+          )}
+          {timed.map(e => {
+            const { top, height } = calcPos(e)
+            return (
+              <div key={e.id} className={`gcal-event gcal-ev-${e.cat}`} style={{ top, height }}
+                onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
+                <div className="gcal-ev-title">{e.title}</div>
+                {height > 34 && <div className="gcal-ev-time">{e.start}{e.end ? ` – ${e.end}` : ''}{e.notes ? ` · ${e.notes}` : ''}</div>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Calendar ──────────────────────────────────────────────────────────────
+export default function Calendar({ state, setState }) {
+  const [calView, setCalView]         = useState('month')
+  const [calViewDate, setCalViewDate] = useState(new Date())
+  const [createModal, setCreateModal] = useState(null)
+  const [eventPopup, setEventPopup]   = useState(null) // { event, x, y }
+  const [form, setForm] = useState({ title: '', date: toDs(new Date()), start: '', end: '', cat: 'personal', notes: '' })
+
+  const today    = new Date()
   const todayStr = toDs(today)
 
   function calNav(dir) {
@@ -166,44 +448,42 @@ export default function Calendar({ state, setState }) {
     })
   }
 
-  function selectDay(ds) {
-    setForm(prev => ({ ...prev, date: ds }))
-    setCalViewDate(new Date(ds + 'T12:00:00'))
+  function handleSelectDay(ds) {
+    setEventPopup(null)
+    setCreateModal({ date: ds })
+  }
+
+  function handleSelectEvent(mouseEvt, event) {
+    setCreateModal(null)
+    setEventPopup({ event, x: mouseEvt.clientX, y: mouseEvt.clientY })
+  }
+
+  function saveEvent(data) {
+    setState(prev => ({ ...prev, events: [...prev.events, { id: uid(), ...data }] }))
+    setCreateModal(null)
+  }
+
+  function deleteEvent(id) {
+    setState(prev => ({ ...prev, events: prev.events.filter(e => e.id !== id) }))
+    setEventPopup(null)
   }
 
   function addEvent() {
     if (!form.title.trim() || !form.date) return
     setState(prev => ({
       ...prev,
-      events: [...prev.events, {
-        id: uid(),
-        title: form.title.trim(),
-        date: form.date,
-        start: form.start || '',
-        end: form.end || '',
-        cat: form.cat,
-        notes: form.notes,
-      }],
+      events: [...prev.events, { id: uid(), title: form.title.trim(), date: form.date, start: form.start, end: form.end, cat: form.cat, notes: form.notes }],
     }))
-    setForm(prev => ({ ...prev, title: '', notes: '' }))
-  }
-
-  function deleteEvent(id) {
-    setState(prev => ({ ...prev, events: prev.events.filter(e => e.id !== id) }))
+    setForm(prev => ({ ...prev, title: '', notes: '', start: '', end: '' }))
   }
 
   function getCalLabel() {
-    if (calView === 'month') {
-      return calViewDate.toLocaleString('default', { month: 'long', year: 'numeric' })
-    }
+    if (calView === 'month') return calViewDate.toLocaleString('default', { month: 'long', year: 'numeric' })
     if (calView === 'week') {
-      const day = (calViewDate.getDay() + 6) % 7
       const mon = new Date(calViewDate)
-      mon.setDate(calViewDate.getDate() - day)
-      const sun = new Date(mon)
-      sun.setDate(mon.getDate() + 6)
-      const fmt = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
-      return `${fmt(mon)} — ${fmt(sun)}`
+      mon.setDate(calViewDate.getDate() - (calViewDate.getDay() + 6) % 7)
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
+      return `${mon.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${sun.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`
     }
     return calViewDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   }
@@ -222,28 +502,20 @@ export default function Calendar({ state, setState }) {
           <button className="btn-ghost" onClick={() => calNav(1)}>→</button>
           <button className="btn-ghost" onClick={() => setCalViewDate(new Date())}>Today</button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div className="cal-view-btns">
-            {['month','week','day'].map(v => (
-              <button
-                key={v}
-                className={'cal-view-btn' + (calView === v ? ' active' : '')}
-                onClick={() => setCalView(v)}
-              >
-                {v.charAt(0).toUpperCase() + v.slice(1)}
-              </button>
-            ))}
-          </div>
-          <span style={{ fontSize: '11px', color: 'var(--text3)' }}>Google Calendar</span>
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#ccc', display: 'inline-block' }} />
+        <div className="cal-view-btns">
+          {['month','week','day'].map(v => (
+            <button key={v} className={'cal-view-btn' + (calView === v ? ' active' : '')} onClick={() => setCalView(v)}>
+              {v.charAt(0).toUpperCase() + v.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="cal-sidebar">
         <div>
-          {calView === 'month' && <MonthView calViewDate={calViewDate} events={state.events} onSelectDay={selectDay} />}
-          {calView === 'week'  && <WeekView  calViewDate={calViewDate} events={state.events} onSelectDay={selectDay} />}
-          {calView === 'day'   && <DayView   calViewDate={calViewDate} events={state.events} />}
+          {calView === 'month' && <MonthView calViewDate={calViewDate} events={state.events} onSelectDay={handleSelectDay} onSelectEvent={handleSelectEvent} />}
+          {calView === 'week'  && <WeekView  calViewDate={calViewDate} events={state.events} onSelectDay={handleSelectDay} onSelectEvent={handleSelectEvent} />}
+          {calView === 'day'   && <DayView   calViewDate={calViewDate} events={state.events} onSelectDay={handleSelectDay} onSelectEvent={handleSelectEvent} />}
         </div>
 
         <div>
@@ -254,14 +526,13 @@ export default function Calendar({ state, setState }) {
             ) : upcoming.map(e => {
               const label = new Date(e.date + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' })
               return (
-                <div key={e.id} className="event-item">
+                <div key={e.id} className="event-item" style={{ cursor: 'pointer' }} onClick={ev => handleSelectEvent(ev, e)}>
                   <div className="event-dot" style={{ background: CAT_DOT[e.cat] || 'var(--accent)' }} />
                   <div className="event-time">{e.start}</div>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div className="event-title">{e.title}</div>
                     <div className="event-sub">{label}{e.notes ? ` · ${e.notes}` : ''}</div>
                   </div>
-                  <button className="del-btn" onClick={() => deleteEvent(e.id)} style={{ marginLeft: 'auto' }}>×</button>
                 </div>
               )
             })}
@@ -303,6 +574,20 @@ export default function Calendar({ state, setState }) {
           </div>
         </div>
       </div>
+
+      {createModal && (
+        <CreateEventModal date={createModal.date} onClose={() => setCreateModal(null)} onSave={saveEvent} />
+      )}
+
+      {eventPopup && (
+        <EventPopup
+          event={eventPopup.event}
+          x={eventPopup.x}
+          y={eventPopup.y}
+          onClose={() => setEventPopup(null)}
+          onDelete={deleteEvent}
+        />
+      )}
     </div>
   )
 }
