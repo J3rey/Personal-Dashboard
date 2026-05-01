@@ -75,6 +75,8 @@ export default function Finance({ state, setState }) {
   const [currResult, setCurrResult] = useState('')
 
   const [incomeModal, setIncomeModal] = useState(null)
+  const [yearlyBreakdownCat, setYearlyBreakdownCat] = useState('All')
+  const [showYearlyBreakdown, setShowYearlyBreakdown] = useState(false)
 
   useEffect(() => {
     const today = new Date()
@@ -294,7 +296,58 @@ export default function Finance({ state, setState }) {
     return { donutData, donutOptions, barData, barOptions, total, catTotals }
   }
 
+  function buildYearlyChart() {
+    const monthData = {}
+    for (let mo = 1; mo <= 12; mo++) {
+      monthData[mo] = {}
+      CATS.forEach(c => { monthData[mo][c] = 0 })
+    }
+    state.expenses.filter(e => !e.isHeader && !e.isEnd).forEach(e => {
+      const d = new Date(e.date + 'T12:00:00')
+      if (d.getFullYear() !== yearFilter) return
+      const mo = d.getMonth() + 1
+      if (e.cat && monthData[mo]) monthData[mo][e.cat] = (monthData[mo][e.cat] || 0) + e.cost
+    })
+
+    const isAll = yearlyBreakdownCat === 'All'
+    const datasets = isAll
+      ? CATS.map(c => ({
+          label: c,
+          data: MONTH_NAMES.map((_, i) => parseFloat((monthData[i + 1][c] || 0).toFixed(2))),
+          backgroundColor: CAT_COLORS[c],
+          stack: 's',
+          borderWidth: 0,
+        }))
+      : [{
+          label: yearlyBreakdownCat,
+          data: MONTH_NAMES.map((_, i) => parseFloat((monthData[i + 1][yearlyBreakdownCat] || 0).toFixed(2))),
+          backgroundColor: CAT_COLORS[yearlyBreakdownCat],
+          borderRadius: 3,
+          borderWidth: 0,
+        }]
+
+    const data = { labels: MONTH_NAMES, datasets }
+    const options = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { stacked: isAll, grid: { display: false }, ticks: { font: { size: 11 }, color: '#9c9990' }, border: { display: false } },
+        y: { stacked: isAll, grid: { color: '#e5e3dc' }, ticks: { font: { size: 10 }, color: '#9c9990' }, border: { display: false } },
+      },
+    }
+
+    const monthTotals = MONTH_NAMES.map((_, i) =>
+      CATS.reduce((sum, c) => sum + (monthData[i + 1][c] || 0), 0)
+    )
+    const yearTotal = monthTotals.reduce((a, b) => a + b, 0)
+    const catTotal = isAll ? yearTotal : MONTH_NAMES.reduce((sum, _, i) => sum + (monthData[i + 1][yearlyBreakdownCat] || 0), 0)
+
+    return { data, options, yearTotal, catTotal }
+  }
+
   const chartData = showCharts ? buildChartData() : null
+  const yearlyChart = showCharts ? buildYearlyChart() : null
 
   const hasUnclosedHeader = (() => {
     const endedIds = new Set(state.expenses.filter(e => e.isEnd && e.headerId).map(e => e.headerId))
@@ -539,6 +592,55 @@ export default function Finance({ state, setState }) {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Yearly breakdown — separate collapsible segment */}
+          {showCharts && (
+            <div className="chart-box" style={{ marginTop: '10px' }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => setShowYearlyBreakdown(v => !v)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text3)' }}>{showYearlyBreakdown ? '▾' : '▸'}</span>
+                  <span className="chart-box-title" style={{ margin: 0 }}>Yearly Breakdown — {yearFilter}</span>
+                  {showYearlyBreakdown && yearlyChart && (
+                    <span style={{ fontSize: '11px', color: 'var(--text3)', fontWeight: 400 }}>
+                      ${yearlyChart.catTotal.toFixed(2)}
+                      {yearlyBreakdownCat !== 'All' && ` of $${yearlyChart.yearTotal.toFixed(2)}`}
+                    </span>
+                  )}
+                </div>
+                <div onClick={e => e.stopPropagation()}>
+                  <select
+                    className="form-select"
+                    value={yearlyBreakdownCat}
+                    onChange={e => { setYearlyBreakdownCat(e.target.value); setShowYearlyBreakdown(true) }}
+                    style={{ fontSize: '11px', padding: '3px 7px' }}
+                  >
+                    <option value="All">All Categories</option>
+                    {CATS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              {showYearlyBreakdown && yearlyChart && (
+                <>
+                  <div style={{ position: 'relative', height: '160px', marginTop: '10px' }}>
+                    <Bar key={yearlyBreakdownCat} data={yearlyChart.data} options={yearlyChart.options} />
+                  </div>
+                  {yearlyBreakdownCat === 'All' && (
+                    <div className="chart-legend">
+                      {CATS.map(c => (
+                        <div key={c} className="legend-item">
+                          <div className="legend-dot" style={{ background: CAT_COLORS[c] }} />
+                          {c}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
