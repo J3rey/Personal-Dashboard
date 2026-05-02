@@ -10,9 +10,9 @@ const CATS_LIST = [
   { value: 'google',   label: 'Study',    color: 'var(--blue)',   bg: 'var(--blue-light)'   },
 ]
 
-const HOUR_H  = 56   // px per hour
-const START_H = 6    // first visible hour (6 AM)
-const END_H   = 22   // last visible hour (10 PM)
+const HOUR_H  = 56
+const START_H = 0
+const END_H   = 24
 const HOURS   = Array.from({ length: END_H - START_H }, (_, i) => i + START_H)
 
 function toDs(d) {
@@ -323,7 +323,7 @@ function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
         <div className="gcal-time-col">
           {HOURS.map((h, idx) => (
             <div key={h} className="gcal-hour-label" style={{ height: HOUR_H }}>
-              {idx > 0 ? hLabel(h) : ''}
+              {idx > 0 && <span>{hLabel(h)}</span>}
             </div>
           ))}
         </div>
@@ -403,7 +403,7 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
         <div className="gcal-time-col">
           {HOURS.map((h, idx) => (
             <div key={h} className="gcal-hour-label" style={{ height: HOUR_H }}>
-              {idx > 0 ? hLabel(h) : ''}
+              {idx > 0 && <span>{hLabel(h)}</span>}
             </div>
           ))}
         </div>

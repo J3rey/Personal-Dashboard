@@ -297,7 +297,9 @@ nav {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 700px;
   display: flex;
   flex-direction: column;
 }
@@ -353,8 +355,6 @@ nav {
 /* Scrollable time body */
 .gcal-body {
   display: flex;
-  overflow-y: auto;
-  max-height: 530px;
 }
 
 /* Hour label gutter */
@@ -364,18 +364,24 @@ nav {
   border-right: 1px solid var(--border);
 }
 .gcal-hour-label {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  padding: 3px 8px 0 0;
-  font-size: 9px;
-  color: var(--text3);
-  font-family: 'DM Mono', monospace;
-  letter-spacing: 0.2px;
+  position: relative;
   border-top: 1px solid var(--border);
 }
 .gcal-hour-label:first-child {
   border-top: none;
+}
+.gcal-hour-label span {
+  position: absolute;
+  right: 8px;
+  top: 0;
+  transform: translateY(-50%);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.2px;
+  background: var(--surface);
+  padding: 0 2px;
 }
 
 /* Day column */
