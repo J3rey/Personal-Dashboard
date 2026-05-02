@@ -3,7 +3,10 @@ const TABS = ['calendar', 'finance', 'habits', 'content']
 export default function Nav({ activeTab, setActiveTab }) {
   return (
     <nav>
-      <img src="/logo-with-name.png" alt="United Dashboard" className="nav-brand-logo" />
+      <div className="nav-brand">
+        <img src="/logo.png" alt="logo" className="nav-brand-logo" />
+        <span>dashboard</span>
+      </div>
       {TABS.map(tab => (
         <button
           key={tab}
