@@ -59,6 +59,7 @@ nav {
   height: 24px;
   width: auto;
   object-fit: contain;
+  mix-blend-mode: multiply;
 }
 .nav-tab {
   padding: 6px 14px;
