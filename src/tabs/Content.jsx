@@ -112,7 +112,7 @@ function ContentRow({ c, pillars, onStatusChange, onNoteChange, onDelete, onDrag
 }
 
 export default function Content({ state, setState }) {
-  const [postedCollapsed, setPostedCollapsed] = useState(false)
+  const [postedCollapsed, setPostedCollapsed] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedColor, setSelectedColor] = useState(0)
   const [newPillarName, setNewPillarName] = useState('')

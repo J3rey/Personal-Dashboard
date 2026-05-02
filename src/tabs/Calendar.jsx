@@ -508,6 +508,10 @@ export default function Calendar({ state, setState }) {
               {v.charAt(0).toUpperCase() + v.slice(1)}
             </button>
           ))}
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px', marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--border)' }}>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#ccc', display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ fontSize: '11px', color: 'var(--text3)' }}>Google Calendar</span>
+          </span>
         </div>
       </div>
 
