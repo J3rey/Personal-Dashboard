@@ -1,15 +1,32 @@
 import { useState, useRef, useEffect } from 'react'
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar.js'
 
-let _nextId = 100
-const uid = () => _nextId++
-
 const CAT_DOT = { google: 'var(--blue)', personal: 'var(--green)', work: 'var(--purple)' }
 const CATS_LIST = [
   { value: 'personal', label: 'Personal', color: 'var(--green)',  bg: 'var(--green-light)'  },
   { value: 'work',     label: 'Work',     color: 'var(--purple)', bg: 'var(--purple-light)' },
   { value: 'google',   label: 'Study',    color: 'var(--blue)',   bg: 'var(--blue-light)'   },
 ]
+const HIDDEN_CALENDARS_KEY = 'dashboard.hiddenCalendars'
+
+function readHiddenCalendars() {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(HIDDEN_CALENDARS_KEY) || '[]')
+    return new Set(Array.isArray(saved) ? saved : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveHiddenCalendars(hiddenCalendars) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(HIDDEN_CALENDARS_KEY, JSON.stringify([...hiddenCalendars]))
+  } catch {
+    // Ignore storage failures so private browsing or quota issues do not break the calendar.
+  }
+}
 
 function gcalEvStyle(e) {
   if (!e.calendarColor) return {}
@@ -612,10 +629,8 @@ export default function Calendar({ state, setState }) {
 
   const [calView, setCalView]         = useState('month')
   const [calViewDate, setCalViewDate] = useState(new Date())
-  const [createModal, setCreateModal] = useState(null)
   const [eventPopup, setEventPopup]   = useState(null) // { event, x, y }
-  const [hiddenCals, setHiddenCals]   = useState(new Set())
-  const [form, setForm] = useState({ title: '', date: toDs(new Date()), start: '', end: '', cat: 'personal', notes: '' })
+  const [hiddenCals, setHiddenCals]   = useState(readHiddenCalendars)
 
   const today    = new Date()
   const todayStr = toDs(today)
@@ -624,6 +639,7 @@ export default function Calendar({ state, setState }) {
     setHiddenCals(prev => {
       const next = new Set(prev)
       next.has(calId) ? next.delete(calId) : next.add(calId)
+      saveHiddenCalendars(next)
       return next
     })
   }
@@ -639,36 +655,20 @@ export default function Calendar({ state, setState }) {
     })
   }
 
-  function handleSelectDay(ds) {
+  function handleSelectDay() {
     setEventPopup(null)
-    setCreateModal({ date: ds })
   }
 
 function handleSelectEvent(mouseEvt, event) {
-  setCreateModal(null)
   const popupEvent = event.start
     ? { ...event, start: formatTime12(event.start), end: event.end ? formatTime12(event.end) : '' }
     : event
   setEventPopup({ event: popupEvent, x: mouseEvt.clientX, y: mouseEvt.clientY })
 }
 
-  function saveEvent(data) {
-    setState(prev => ({ ...prev, events: [...prev.events, { id: uid(), ...data }] }))
-    setCreateModal(null)
-  }
-
   function deleteEvent(id) {
     setState(prev => ({ ...prev, events: prev.events.filter(e => e.id !== id) }))
     setEventPopup(null)
-  }
-
-  function addEvent() {
-    if (!form.title.trim() || !form.date) return
-    setState(prev => ({
-      ...prev,
-      events: [...prev.events, { id: uid(), title: form.title.trim(), date: form.date, start: form.start, end: form.end, cat: form.cat, notes: form.notes }],
-    }))
-    setForm(prev => ({ ...prev, title: '', notes: '', start: '', end: '' }))
   }
 
   function getCalLabel() {
@@ -772,46 +772,8 @@ function handleSelectEvent(mouseEvt, event) {
             </div>
           )}
 
-          <div className="side-card">
-            <h3>Add Event</h3>
-            <div className="form-row">
-              <label>Title</label>
-              <input className="form-input" placeholder="Event name" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addEvent()} />
-            </div>
-            <div className="form-row">
-              <label>Date</label>
-              <input className="form-input" type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', color: 'var(--text3)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Start</label>
-                <input className="form-input" type="time" value={form.start} onChange={e => setForm(p => ({ ...p, start: e.target.value }))} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', color: 'var(--text3)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>End</label>
-                <input className="form-input" type="time" value={form.end} onChange={e => setForm(p => ({ ...p, end: e.target.value }))} />
-              </div>
-            </div>
-            <div className="form-row">
-              <label>Category</label>
-              <select className="form-select" style={{ width: '100%' }} value={form.cat} onChange={e => setForm(p => ({ ...p, cat: e.target.value }))}>
-                <option value="personal">Personal</option>
-                <option value="work">Work</option>
-                <option value="google">Study</option>
-              </select>
-            </div>
-            <div className="form-row">
-              <label>Notes</label>
-              <input className="form-input" placeholder="Optional" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
-            </div>
-            <button className="btn-primary" onClick={addEvent} style={{ width: '100%' }}>Add Event</button>
-          </div>
         </div>
       </div>
-
-      {createModal && (
-        <CreateEventModal date={createModal.date} onClose={() => setCreateModal(null)} onSave={saveEvent} />
-      )}
 
       {eventPopup && (
         <EventPopup
