@@ -226,7 +226,8 @@ export default function Finance({ state, setState, user, isDemo }) {
 
   function saveIncomeModal() {
     if (!incomeModal) return
-    const updated = { ...incomeModal, amount: parseFloat(incomeModal.amount) || incomeModal.amount }
+    const parsedAmount = parseFloat(incomeModal.amount)
+    const updated = { ...incomeModal, amount: Number.isNaN(parsedAmount) ? incomeModal.amount : parsedAmount }
     setState(prev => ({ ...prev, income: prev.income.map(i => i.id === updated.id ? updated : i) }))
     if (!isDemo) db.updateIncome(updated.id, updated).catch(console.error)
     setIncomeModal(null)
