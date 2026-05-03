@@ -32,11 +32,15 @@ function sortEventsForDisplay(a, b) {
   )
 }
 
+function eventKey(e) {
+  return `${e.cat}:${e.id}:${e.date}:${e.start || ''}`
+}
+
 function EventLabel({ event, showTime = false }) {
   return (
     <span className="event-label">
       {event.isTask && <span className="task-marker" aria-hidden="true" />}
-      {showTime && event.start && <span>{event.start}</span>}
+      {showTime && event.start && <span>{formatTime12(event.start)}</span>}
       <span className="event-label-title">{event.title}</span>
     </span>
   )
@@ -64,14 +68,90 @@ function hLabel(h) {
   return `${h - 12} PM`
 }
 
+function formatTime12(time) {
+  if (!time) return ''
+  if (/\b(?:AM|PM)\b/i.test(time)) return time
+  const [h, m = '00'] = time.split(':')
+  const hour = Number(h)
+  if (Number.isNaN(hour)) return time
+  const suffix = hour >= 12 ? 'PM' : 'AM'
+  const displayHour = hour % 12 || 12
+  return `${displayHour}:${m.padStart(2, '0')} ${suffix}`
+}
+
+function formatTimeRange12(start, end) {
+  if (!start) return ''
+  return end ? `${formatTime12(start)} - ${formatTime12(end)}` : formatTime12(start)
+}
+
 function calcPos(e) {
-  const [sh, sm] = e.start.split(':').map(Number)
-  const startMin = sh * 60 + sm
-  let endMin = startMin + 60
-  if (e.end) { const [eh, em] = e.end.split(':').map(Number); endMin = eh * 60 + em }
+  const { startMin, endMin } = getEventMinutes(e)
   return {
     top:    (startMin - START_H * 60) * (HOUR_H / 60),
     height: Math.max((endMin - startMin) * (HOUR_H / 60), 22),
+  }
+}
+
+function getEventMinutes(e) {
+  const [sh, sm] = e.start.split(':').map(Number)
+  const startMin = sh * 60 + sm
+  let endMin = startMin + 60
+  if (e.end) {
+    const [eh, em] = e.end.split(':').map(Number)
+    endMin = eh * 60 + em
+  }
+  if (endMin <= startMin) endMin = startMin + 60
+  return { startMin, endMin }
+}
+
+function layoutTimedEvents(events) {
+  const sorted = [...events].sort((a, b) => {
+    const ar = getEventMinutes(a)
+    const br = getEventMinutes(b)
+    return ar.startMin - br.startMin || ar.endMin - br.endMin || a.title.localeCompare(b.title)
+  })
+  const layout = new Map()
+  let group = []
+  let groupEnd = -1
+
+  function flushGroup() {
+    if (!group.length) return
+    const columnEnds = []
+    const placed = group.map(event => {
+      const { startMin, endMin } = getEventMinutes(event)
+      let column = columnEnds.findIndex(end => end <= startMin)
+      if (column === -1) {
+        column = columnEnds.length
+        columnEnds.push(endMin)
+      } else {
+        columnEnds[column] = endMin
+      }
+      return { event, column }
+    })
+    const columns = Math.max(columnEnds.length, 1)
+    placed.forEach(({ event, column }) => layout.set(eventKey(event), { column, columns }))
+    group = []
+    groupEnd = -1
+  }
+
+  sorted.forEach(event => {
+    const { startMin, endMin } = getEventMinutes(event)
+    if (group.length && startMin >= groupEnd) flushGroup()
+    group.push(event)
+    groupEnd = Math.max(groupEnd, endMin)
+  })
+  flushGroup()
+
+  return layout
+}
+
+function eventColumnStyle(layoutInfo) {
+  if (!layoutInfo || layoutInfo.columns <= 1) return {}
+  const widthPct = 100 / layoutInfo.columns
+  return {
+    left: `calc(${layoutInfo.column * widthPct}% + 3px)`,
+    right: 'auto',
+    width: `calc(${widthPct}% - 6px)`,
   }
 }
 
@@ -402,6 +482,7 @@ function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
           const ds   = toDs(dt)
           const isT  = ds === todayStr
           const evs  = events.filter(e => e.date === ds && e.start).sort(sortEventsForDisplay)
+          const timedLayout = layoutTimedEvents(evs)
           return (
             <div key={i} className={'gcal-day-col' + (isT ? ' gcal-today-col' : '')} onClick={() => onSelectDay(ds)}>
               {HOURS.map(h => <div key={h} className="gcal-hour-line" style={{ height: HOUR_H }} />)}
@@ -411,10 +492,10 @@ function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
               {evs.map(e => {
                 const { top, height } = calcPos(e)
                 return (
-                  <div key={e.id} className={`gcal-event${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`} style={{ top, height, ...gcalEvStyle(e) }}
+                  <div key={eventKey(e)} className={`gcal-event${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`} style={{ top, height, ...eventColumnStyle(timedLayout.get(eventKey(e))), ...gcalEvStyle(e) }}
                     onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
                     <div className="gcal-ev-title"><EventLabel event={e} /></div>
-                    {height > 34 && <div className="gcal-ev-time">{e.start}{e.end ? `–${e.end}` : ''}</div>}
+                    {height > 34 && <div className="gcal-ev-time">{formatTimeRange12(e.start, e.end)}</div>}
                   </div>
                 )
               })}
@@ -434,6 +515,7 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
   const allDay  = events.filter(e => e.date === ds && !e.start && !e.isTask).sort(sortEventsForDisplay)
   const tasks   = events.filter(e => e.date === ds && e.isTask).sort(sortEventsForDisplay)
   const timed   = events.filter(e => e.date === ds && e.start).sort(sortEventsForDisplay)
+  const timedLayout = layoutTimedEvents(timed)
 
   const nowMin     = today.getHours() * 60 + today.getMinutes()
   const nowTop     = (nowMin - START_H * 60) * (HOUR_H / 60)
@@ -502,10 +584,10 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
           {timed.map(e => {
             const { top, height } = calcPos(e)
             return (
-              <div key={e.id} className={`gcal-event${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`} style={{ top, height, ...gcalEvStyle(e) }}
+              <div key={eventKey(e)} className={`gcal-event${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`} style={{ top, height, ...eventColumnStyle(timedLayout.get(eventKey(e))), ...gcalEvStyle(e) }}
                 onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
                 <div className="gcal-ev-title"><EventLabel event={e} /></div>
-                {height > 34 && <div className="gcal-ev-time">{e.start}{e.end ? ` – ${e.end}` : ''}{e.notes ? ` · ${e.notes}` : ''}</div>}
+                {height > 34 && <div className="gcal-ev-time">{formatTimeRange12(e.start, e.end)}{e.notes ? ` · ${e.notes}` : ''}</div>}
               </div>
             )
           })}
@@ -562,10 +644,13 @@ export default function Calendar({ state, setState }) {
     setCreateModal({ date: ds })
   }
 
-  function handleSelectEvent(mouseEvt, event) {
-    setCreateModal(null)
-    setEventPopup({ event, x: mouseEvt.clientX, y: mouseEvt.clientY })
-  }
+function handleSelectEvent(mouseEvt, event) {
+  setCreateModal(null)
+  const popupEvent = event.start
+    ? { ...event, start: formatTime12(event.start), end: event.end ? formatTime12(event.end) : '' }
+    : event
+  setEventPopup({ event: popupEvent, x: mouseEvt.clientX, y: mouseEvt.clientY })
+}
 
   function saveEvent(data) {
     setState(prev => ({ ...prev, events: [...prev.events, { id: uid(), ...data }] }))
@@ -657,7 +742,7 @@ export default function Calendar({ state, setState }) {
               return (
                 <div key={e.id} className="event-item" style={{ cursor: 'pointer' }} onClick={ev => handleSelectEvent(ev, e)}>
                   <div className="event-dot" style={{ background: e.calendarColor || CAT_DOT[e.cat] || 'var(--accent)' }} />
-                  <div className="event-time">{e.start}</div>
+                  <div className="event-time">{formatTime12(e.start)}</div>
                   <div style={{ flex: 1 }}>
                     <div className="event-title"><EventLabel event={e} /></div>
                     <div className="event-sub">{label}{e.calendarName ? ` · ${e.calendarName}` : ''}</div>

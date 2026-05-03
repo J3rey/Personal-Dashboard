@@ -621,6 +621,10 @@ nav {
   z-index: 1;
   border-left: 3px solid transparent;
   transition: filter 0.1s, box-shadow 0.1s;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 .gcal-event:hover {
   filter: brightness(0.94);
@@ -633,6 +637,12 @@ nav {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  width: 100%;
+  flex: 0 0 auto;
+}
+.gcal-ev-title .event-label {
+  width: 100%;
 }
 .gcal-ev-time {
   font-size: 10px;
@@ -641,6 +651,9 @@ nav {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  width: 100%;
+  flex: 0 0 auto;
 }
 
 /* Category colours */
