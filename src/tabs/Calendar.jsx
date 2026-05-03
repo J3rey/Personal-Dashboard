@@ -17,6 +17,31 @@ function gcalEvStyle(e) {
   return { background: e.calendarColor + '22', color: '#1a1a18' }
 }
 
+function eventDisplayRank(e) {
+  if (!e.start && !e.isTask) return 0
+  if (e.isTask) return 1
+  return 2
+}
+
+function sortEventsForDisplay(a, b) {
+  return (
+    a.date.localeCompare(b.date) ||
+    eventDisplayRank(a) - eventDisplayRank(b) ||
+    (a.start || '').localeCompare(b.start || '') ||
+    a.title.localeCompare(b.title)
+  )
+}
+
+function EventLabel({ event, showTime = false }) {
+  return (
+    <span className="event-label">
+      {event.isTask && <span className="task-marker" aria-hidden="true" />}
+      {showTime && event.start && <span>{event.start}</span>}
+      <span className="event-label-title">{event.title}</span>
+    </span>
+  )
+}
+
 const HOUR_H  = 56
 const START_H = 0
 const END_H   = 24
@@ -70,8 +95,10 @@ function EventPopup({ event, x, y, onClose, onDelete }) {
 
   // smart positioning — flip if too close to edge
   const W = 268, H = 320
-  const left = x + W + 16 > window.innerWidth  ? x - W - 8 : x + 12
-  const top  = y + H      > window.innerHeight ? window.innerHeight - H - 12 : y
+  const popupW = Math.min(W, window.innerWidth - 24)
+  const rawLeft = x + popupW + 16 > window.innerWidth ? x - popupW - 8 : x + 12
+  const left = Math.max(12, Math.min(rawLeft, window.innerWidth - popupW - 12))
+  const top  = Math.max(12, Math.min(y, window.innerHeight - H - 12))
 
   return (
     <div
@@ -79,7 +106,7 @@ function EventPopup({ event, x, y, onClose, onDelete }) {
       style={{
         position: 'fixed', left, top, zIndex: 2000,
         background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: '13px', width: `${W}px`,
+        borderRadius: '13px', width: `${popupW}px`,
         boxShadow: '0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06)',
         animation: 'slideUp 0.14s ease',
         overflow: 'hidden',
@@ -173,7 +200,7 @@ function CreateEventModal({ date, onClose, onSave }) {
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.15s ease' }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '18px', padding: '28px', width: '400px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', animation: 'slideUp 0.18s cubic-bezier(0.34,1.2,0.64,1)' }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '18px', padding: '28px', width: 'min(400px, calc(100vw - 24px))', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', overflowX: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', animation: 'slideUp 0.18s cubic-bezier(0.34,1.2,0.64,1)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '22px' }}>
           <div>
             <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.3px' }}>New Event</div>
@@ -204,7 +231,7 @@ function CreateEventModal({ date, onClose, onSave }) {
 
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Category</div>
-          <div style={{ display: 'flex', gap: '7px' }}>
+          <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
             {CATS_LIST.map(c => {
               const active = cat === c.value
               return (
@@ -258,7 +285,7 @@ function MonthView({ calViewDate, events, onSelectDay, onSelectEvent }) {
       {cells.map((cell, i) => {
         const ds = toDs(cell.d)
         const isToday = ds === todayStr
-        const evs = events.filter(e => e.date === ds)
+        const evs = events.filter(e => e.date === ds).sort(sortEventsForDisplay)
         return (
           <div key={i} className={`cal-cell${cell.other ? ' other-month' : ''}${isToday ? ' today' : ''}`} onClick={() => onSelectDay(ds)}>
             <div className="cal-date">{cell.d.getDate()}</div>
@@ -269,7 +296,7 @@ function MonthView({ calViewDate, events, onSelectDay, onSelectEvent }) {
                 style={gcalEvStyle(e)}
                 onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}
               >
-                {e.start ? e.start + ' ' : ''}{e.title}
+                <EventLabel event={e} showTime />
               </div>
             ))}
             {evs.length > 3 && <div style={{ fontSize: '9px', color: 'var(--text3)' }}>+{evs.length - 3} more</div>}
@@ -295,8 +322,14 @@ function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
   const nowVisible = nowMin >= START_H * 60 && nowMin < END_H * 60
 
   const allDayMap = {}
-  dates.forEach(dt => { const ds = toDs(dt); allDayMap[ds] = events.filter(e => e.date === ds && !e.start) })
+  const taskMap = {}
+  dates.forEach(dt => {
+    const ds = toDs(dt)
+    allDayMap[ds] = events.filter(e => e.date === ds && !e.start && !e.isTask).sort(sortEventsForDisplay)
+    taskMap[ds] = events.filter(e => e.date === ds && e.isTask).sort(sortEventsForDisplay)
+  })
   const hasAllDay = dates.some(dt => allDayMap[toDs(dt)].length > 0)
+  const hasTasks = dates.some(dt => taskMap[toDs(dt)].length > 0)
 
   return (
     <div className="gcal-wrap">
@@ -321,12 +354,32 @@ function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
           {dates.map((dt, i) => {
             const ds = toDs(dt)
             return (
-              <div key={i} style={{ flex: 1, borderLeft: '1px solid var(--border)', padding: '3px 3px', display: 'flex', flexWrap: 'wrap', gap: '2px', minHeight: '26px' }}>
+              <div key={i} style={{ flex: 1, minWidth: 0, borderLeft: '1px solid var(--border)', padding: '3px 3px', display: 'flex', flexWrap: 'wrap', gap: '2px', minHeight: '26px', overflow: 'hidden' }}>
                 {allDayMap[ds].map(e => (
                   <div key={e.id} className={`gcal-allday-chip${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`}
                     style={{ ...gcalEvStyle(e), width: '100%', display: 'block' }}
                     onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
-                    {e.title}
+                    <EventLabel event={e} />
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {hasTasks && (
+        <div className="gcal-task-strip">
+          <div className="gcal-gutter gcal-allday-label">tasks</div>
+          {dates.map((dt, i) => {
+            const ds = toDs(dt)
+            return (
+              <div key={i} className="gcal-task-cell">
+                {taskMap[ds].map(e => (
+                  <div key={e.id} className={`gcal-allday-chip${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`}
+                    style={{ ...gcalEvStyle(e), width: '100%', display: 'block' }}
+                    onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
+                    <EventLabel event={e} />
                   </div>
                 ))}
               </div>
@@ -348,7 +401,7 @@ function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
         {dates.map((dt, i) => {
           const ds   = toDs(dt)
           const isT  = ds === todayStr
-          const evs  = events.filter(e => e.date === ds && e.start)
+          const evs  = events.filter(e => e.date === ds && e.start).sort(sortEventsForDisplay)
           return (
             <div key={i} className={'gcal-day-col' + (isT ? ' gcal-today-col' : '')} onClick={() => onSelectDay(ds)}>
               {HOURS.map(h => <div key={h} className="gcal-hour-line" style={{ height: HOUR_H }} />)}
@@ -360,7 +413,7 @@ function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
                 return (
                   <div key={e.id} className={`gcal-event${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`} style={{ top, height, ...gcalEvStyle(e) }}
                     onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
-                    <div className="gcal-ev-title">{e.title}</div>
+                    <div className="gcal-ev-title"><EventLabel event={e} /></div>
                     {height > 34 && <div className="gcal-ev-time">{e.start}{e.end ? `–${e.end}` : ''}</div>}
                   </div>
                 )
@@ -378,8 +431,9 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
   const ds      = toDs(calViewDate)
   const today   = new Date()
   const isToday = ds === toDs(today)
-  const allDay  = events.filter(e => e.date === ds && !e.start)
-  const timed   = events.filter(e => e.date === ds && e.start)
+  const allDay  = events.filter(e => e.date === ds && !e.start && !e.isTask).sort(sortEventsForDisplay)
+  const tasks   = events.filter(e => e.date === ds && e.isTask).sort(sortEventsForDisplay)
+  const timed   = events.filter(e => e.date === ds && e.start).sort(sortEventsForDisplay)
 
   const nowMin     = today.getHours() * 60 + today.getMinutes()
   const nowTop     = (nowMin - START_H * 60) * (HOUR_H / 60)
@@ -409,7 +463,22 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
               <div key={e.id} className={`gcal-allday-chip${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`}
                 style={{ ...gcalEvStyle(e), width: '100%', display: 'block' }}
                 onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
-                {e.title}
+                <EventLabel event={e} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tasks.length > 0 && (
+        <div className="gcal-task-strip">
+          <div className="gcal-gutter gcal-allday-label">tasks</div>
+          <div className="gcal-allday-events">
+            {tasks.map(e => (
+              <div key={e.id} className={`gcal-allday-chip${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`}
+                style={{ ...gcalEvStyle(e), width: '100%', display: 'block' }}
+                onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
+                <EventLabel event={e} />
               </div>
             ))}
           </div>
@@ -435,7 +504,7 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
             return (
               <div key={e.id} className={`gcal-event${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`} style={{ top, height, ...gcalEvStyle(e) }}
                 onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
-                <div className="gcal-ev-title">{e.title}</div>
+                <div className="gcal-ev-title"><EventLabel event={e} /></div>
                 {height > 34 && <div className="gcal-ev-time">{e.start}{e.end ? ` – ${e.end}` : ''}{e.notes ? ` · ${e.notes}` : ''}</div>}
               </div>
             )
@@ -530,7 +599,7 @@ export default function Calendar({ state, setState }) {
 
   const upcoming = allEvents
     .filter(e => e.date >= todayStr)
-    .sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''))
+    .sort(sortEventsForDisplay)
     .slice(0, 5)
 
   return (
@@ -548,7 +617,7 @@ export default function Calendar({ state, setState }) {
               {v.charAt(0).toUpperCase() + v.slice(1)}
             </button>
           ))}
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--border)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--border)', flexWrap: 'wrap', minWidth: 0 }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: isConnected ? '#4285f4' : reconnectNeeded ? '#fbbc04' : '#ccc', display: 'inline-block', flexShrink: 0 }} />
             {isConnected ? (
               <>
@@ -590,7 +659,7 @@ export default function Calendar({ state, setState }) {
                   <div className="event-dot" style={{ background: e.calendarColor || CAT_DOT[e.cat] || 'var(--accent)' }} />
                   <div className="event-time">{e.start}</div>
                   <div style={{ flex: 1 }}>
-                    <div className="event-title">{e.title}</div>
+                    <div className="event-title"><EventLabel event={e} /></div>
                     <div className="event-sub">{label}{e.calendarName ? ` · ${e.calendarName}` : ''}</div>
                   </div>
                 </div>

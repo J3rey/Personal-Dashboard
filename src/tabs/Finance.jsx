@@ -791,8 +791,8 @@ export default function Finance({ state, setState, user, isDemo }) {
 
       {/* Income edit modal */}
       {incomeModal && (
-        <div onClick={() => setIncomeModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div onClick={ev => ev.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px', width: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+        <div onClick={() => setIncomeModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div onClick={ev => ev.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px', width: 'min(320px, 100%)', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', overflowX: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
             <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text1)', marginBottom: '18px' }}>Edit Income</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
               <div>
