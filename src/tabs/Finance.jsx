@@ -10,6 +10,7 @@ import {
   Legend,
 } from 'chart.js'
 import { CATS, CAT_COLORS, RATES } from '../constants/index.js'
+import * as db from '../services/db.js'
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
@@ -45,7 +46,7 @@ const centrePlugin = {
   },
 }
 
-export default function Finance({ state, setState }) {
+export default function Finance({ state, setState, user, isDemo }) {
   const [activeFilters, setActiveFilters] = useState([])
   const [monthFilter, setMonthFilter] = useState(String(new Date().getMonth() + 1))
   const [yearFilter, setYearFilter]   = useState(new Date().getFullYear())
@@ -140,13 +141,21 @@ export default function Finance({ state, setState }) {
   const totalInc = monthIncome.reduce((a, i) => a + i.amount, 0)
   const net = totalInc - totalExp
 
-  function addExpense() {
+  async function addExpense() {
     if (!newDetail.trim() || isNaN(parseFloat(newCost))) return
-    const entry = {
-      id: uid(), date: newDate, cat: newCat,
+    const expData = {
+      date: newDate, cat: newCat,
       detail: newDetail.trim(), cost: parseFloat(newCost),
       type: newType, person: newPerson.trim(),
     }
+    let id
+    if (isDemo) {
+      id = uid()
+    } else {
+      id = await db.insertTransaction(user.id, expData, state.expenses.length).catch(console.error)
+      if (!id) return
+    }
+    const entry = { id, ...expData }
     setState(prev => {
       const exps = [...prev.expenses]
       let insertIdx = exps.length
@@ -163,35 +172,44 @@ export default function Finance({ state, setState }) {
     setNameFieldVisible(false); setNewType('normal')
   }
 
-  function addEventHeader() {
+  async function addEventHeader() {
     if (!newHeader.trim()) return
-    setState(prev => ({
-      ...prev,
-      expenses: [...prev.expenses, { id: 'h' + uid(), isHeader: true, label: newHeader.trim(), date: newDate || '0000-00-00' }],
-    }))
+    const header = { isHeader: true, label: newHeader.trim(), date: newDate || '0000-00-00' }
+    let id
+    if (isDemo) {
+      id = 'h' + uid()
+    } else {
+      id = await db.insertTransaction(user.id, header, state.expenses.length).catch(console.error)
+      if (!id) return
+    }
+    setState(prev => ({ ...prev, expenses: [...prev.expenses, { id, ...header }] }))
     setNewHeader('')
   }
 
-  function addEventEnd() {
+  async function addEventEnd() {
     const endedIds = new Set(state.expenses.filter(e => e.isEnd && e.headerId).map(e => e.headerId))
     const last = [...state.expenses].reverse().find(e => e.isHeader && !endedIds.has(e.id))
     if (!last) return
-    setState(prev => ({
-      ...prev,
-      expenses: [...prev.expenses, { id: 'e' + uid(), isEnd: true, label: 'End of ' + last.label, headerId: last.id, date: newDate }],
-    }))
+    const end = { isEnd: true, label: 'End of ' + last.label, headerId: last.id, date: newDate }
+    let id
+    if (isDemo) {
+      id = 'e' + uid()
+    } else {
+      id = await db.insertTransaction(user.id, end, state.expenses.length).catch(console.error)
+      if (!id) return
+    }
+    setState(prev => ({ ...prev, expenses: [...prev.expenses, { id, ...end }] }))
   }
 
   function deleteExpense(id) {
-    setState(prev => {
-      const target = prev.expenses.find(e => e.id === id)
-      const toDelete = new Set([id])
-      if (target?.isHeader) {
-        const end = prev.expenses.find(e => e.isEnd && e.headerId === id)
-        if (end) toDelete.add(end.id)
-      }
-      return { ...prev, expenses: prev.expenses.filter(e => !toDelete.has(e.id)) }
-    })
+    const target = state.expenses.find(e => e.id === id)
+    const toDelete = new Set([id])
+    if (target?.isHeader) {
+      const end = state.expenses.find(e => e.isEnd && e.headerId === id)
+      if (end) toDelete.add(end.id)
+    }
+    setState(prev => ({ ...prev, expenses: prev.expenses.filter(e => !toDelete.has(e.id)) }))
+    if (!isDemo) toDelete.forEach(did => db.deleteTransaction(did).catch(console.error))
   }
 
   function editExpenseCat(id) {
@@ -199,27 +217,39 @@ export default function Finance({ state, setState }) {
     const e = exps.find(x => x.id === id)
     if (!e) return
     const v = prompt('Edit category (Food/Transport/Misc/Recurring/Events/Clothes/Gifts):', e.cat)
-    if (v && CATS.includes(v)) { e.cat = v; setState(prev => ({ ...prev, expenses: exps })) }
+    if (v && CATS.includes(v)) {
+      e.cat = v
+      setState(prev => ({ ...prev, expenses: exps }))
+      if (!isDemo) db.updateTransaction(id, { cat: v }).catch(console.error)
+    }
   }
 
   function saveIncomeModal() {
     if (!incomeModal) return
-    setState(prev => ({ ...prev, income: prev.income.map(i => i.id === incomeModal.id ? { ...incomeModal, amount: parseFloat(incomeModal.amount) || i.amount } : i) }))
+    const updated = { ...incomeModal, amount: parseFloat(incomeModal.amount) || incomeModal.amount }
+    setState(prev => ({ ...prev, income: prev.income.map(i => i.id === updated.id ? updated : i) }))
+    if (!isDemo) db.updateIncome(updated.id, updated).catch(console.error)
     setIncomeModal(null)
   }
 
-  function addIncome() {
+  async function addIncome() {
     const amount = parseFloat(incAmount)
     if (!incSource.trim() || isNaN(amount)) return
-    setState(prev => ({
-      ...prev,
-      income: [...prev.income, { id: uid(), date: incDate, source: incSource.trim(), amount, salary: incSalary }],
-    }))
+    const incData = { date: incDate, source: incSource.trim(), amount, salary: incSalary }
+    let id
+    if (isDemo) {
+      id = uid()
+    } else {
+      id = await db.insertIncome(user.id, incData).catch(console.error)
+      if (!id) return
+    }
+    setState(prev => ({ ...prev, income: [...prev.income, { id, ...incData }] }))
     setIncAmount(''); setIncSource(''); setIncSalary(false)
   }
 
   function deleteIncome(id) {
     setState(prev => ({ ...prev, income: prev.income.filter(i => i.id !== id) }))
+    if (!isDemo) db.deleteIncome(id).catch(console.error)
   }
 
   function convertCurrency() {

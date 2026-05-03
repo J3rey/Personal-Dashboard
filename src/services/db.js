@@ -62,7 +62,7 @@ export async function fetchTransactions(userId) {
   if (error) throw error
   return (data ?? []).map(tx => {
     if (tx.row_type === 'header') return { id: tx.id, isHeader: true, label: tx.label, date: tx.date }
-    if (tx.row_type === 'end')    return { id: tx.id, isEnd: true,    label: tx.label, date: tx.date }
+    if (tx.row_type === 'end')    return { id: tx.id, isEnd: true,    label: tx.label, date: tx.date, headerId: tx.header_id }
     return {
       id: tx.id, date: tx.date, cat: tx.cat, detail: tx.detail,
       cost: tx.cost, type: tx.tx_type, person: tx.person ?? '',
@@ -74,7 +74,7 @@ export async function insertTransaction(userId, tx, sortOrder) {
   const row = tx.isHeader
     ? { user_id: userId, date: tx.date, row_type: 'header', label: tx.label, sort_order: sortOrder }
     : tx.isEnd
-    ? { user_id: userId, date: tx.date, row_type: 'end', label: tx.label, sort_order: sortOrder }
+    ? { user_id: userId, date: tx.date, row_type: 'end', label: tx.label, header_id: tx.headerId ?? null, sort_order: sortOrder }
     : { user_id: userId, date: tx.date, row_type: 'expense', cat: tx.cat, detail: tx.detail, cost: tx.cost, tx_type: tx.type, person: tx.person, sort_order: sortOrder }
   const { data, error } = await supabase.from('finance_transactions').insert(row).select().single()
   if (error) throw error
@@ -115,6 +115,16 @@ export async function insertIncome(userId, inc) {
     .select().single()
   if (error) throw error
   return data.id
+}
+
+export async function updateIncome(id, changes) {
+  const mapped = {}
+  if ('salary' in changes) { mapped.is_salary = changes.salary }
+  if ('source' in changes) { mapped.source = changes.source }
+  if ('amount' in changes) { mapped.amount = changes.amount }
+  if ('date'   in changes) { mapped.date = changes.date }
+  const { error } = await supabase.from('finance_income').update(mapped).eq('id', id)
+  if (error) throw error
 }
 
 export async function deleteIncome(id) {
