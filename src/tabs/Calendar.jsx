@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useGoogleCalendar } from '../hooks/useGoogleCalendar.js'
 
 let _nextId = 100
 const uid = () => _nextId++
@@ -9,6 +10,11 @@ const CATS_LIST = [
   { value: 'work',     label: 'Work',     color: 'var(--purple)', bg: 'var(--purple-light)' },
   { value: 'google',   label: 'Study',    color: 'var(--blue)',   bg: 'var(--blue-light)'   },
 ]
+
+function gcalEvStyle(e) {
+  if (!e.calendarColor) return {}
+  return { background: e.calendarColor + '22', color: e.calendarColor }
+}
 
 const HOUR_H  = 56
 const START_H = 0
@@ -46,7 +52,11 @@ function calcPos(e) {
 // ── Event detail popover ───────────────────────────────────────────────────────
 function EventPopup({ event, x, y, onClose, onDelete }) {
   const ref = useRef(null)
-  const cat = CATS_LIST.find(c => c.value === event.cat)
+  const cat       = CATS_LIST.find(c => c.value === event.cat)
+  const evColor   = event.calendarColor || cat?.color || 'var(--accent)'
+  const evBg      = event.calendarColor ? event.calendarColor + '22' : cat?.bg || 'var(--surface2)'
+  const evLabel   = event.calendarName  || cat?.label || event.cat
+  const isGcal    = !!event.calendarColor
 
   useEffect(() => {
     function onMouse(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
@@ -75,7 +85,7 @@ function EventPopup({ event, x, y, onClose, onDelete }) {
       }}
     >
       {/* Colour header band */}
-      <div style={{ height: '5px', background: cat?.color || 'var(--accent)' }} />
+      <div style={{ height: '5px', background: evColor }} />
 
       <div style={{ padding: '14px 16px 16px' }}>
         {/* Title row */}
@@ -106,17 +116,18 @@ function EventPopup({ event, x, y, onClose, onDelete }) {
 
         {/* Category chip */}
         <div style={{ marginBottom: '12px' }}>
-          <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '10px', background: cat?.bg || 'var(--surface2)', color: cat?.color || 'var(--text3)', fontWeight: 500 }}>
-            {cat?.label || event.cat}
+          <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '10px', background: evBg, color: evColor, fontWeight: 500 }}>
+            {evLabel}
           </span>
         </div>
 
         {/* Actions */}
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
+          {isGcal && <span style={{ fontSize: '11px', color: 'var(--text3)', alignSelf: 'center', marginRight: 'auto' }}>Google Calendar</span>}
           <button
-            onClick={() => onDelete(event.id)}
-            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '5px 12px', cursor: 'pointer', fontSize: '12px', color: 'var(--red)', transition: 'all 0.1s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#fff0f0'; e.currentTarget.style.borderColor = 'var(--red)' }}
+            onClick={() => !isGcal && onDelete(event.id)}
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '5px 12px', cursor: isGcal ? 'default' : 'pointer', fontSize: '12px', color: isGcal ? 'var(--text3)' : 'var(--red)', transition: 'all 0.1s', opacity: isGcal ? 0.4 : 1 }}
+            onMouseEnter={e => { if (!isGcal) { e.currentTarget.style.background = '#fff0f0'; e.currentTarget.style.borderColor = 'var(--red)' } }}
             onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = 'var(--border)' }}
           >Delete</button>
         </div>
@@ -250,7 +261,8 @@ function MonthView({ calViewDate, events, onSelectDay, onSelectEvent }) {
             {evs.slice(0, 3).map(e => (
               <div
                 key={e.id}
-                className={`cal-event ${e.cat}`}
+                className={`cal-event${e.calendarColor ? '' : ' ' + e.cat}`}
+                style={gcalEvStyle(e)}
                 onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}
               >
                 {e.start ? e.start + ' ' : ''}{e.title}
@@ -341,7 +353,7 @@ function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
               {evs.map(e => {
                 const { top, height } = calcPos(e)
                 return (
-                  <div key={e.id} className={`gcal-event gcal-ev-${e.cat}`} style={{ top, height }}
+                  <div key={e.id} className={`gcal-event${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`} style={{ top, height, ...gcalEvStyle(e) }}
                     onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
                     <div className="gcal-ev-title">{e.title}</div>
                     {height > 34 && <div className="gcal-ev-time">{e.start}{e.end ? `–${e.end}` : ''}</div>}
@@ -415,7 +427,7 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
           {timed.map(e => {
             const { top, height } = calcPos(e)
             return (
-              <div key={e.id} className={`gcal-event gcal-ev-${e.cat}`} style={{ top, height }}
+              <div key={e.id} className={`gcal-event${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`} style={{ top, height, ...gcalEvStyle(e) }}
                 onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
                 <div className="gcal-ev-title">{e.title}</div>
                 {height > 34 && <div className="gcal-ev-time">{e.start}{e.end ? ` – ${e.end}` : ''}{e.notes ? ` · ${e.notes}` : ''}</div>}
@@ -430,6 +442,8 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
 
 // ── Main Calendar ──────────────────────────────────────────────────────────────
 export default function Calendar({ state, setState }) {
+  const { isConnected, events: gcalEvents, calendars, loading: gcalLoading, connect, disconnect } = useGoogleCalendar()
+
   const [calView, setCalView]         = useState('month')
   const [calViewDate, setCalViewDate] = useState(new Date())
   const [createModal, setCreateModal] = useState(null)
@@ -438,6 +452,8 @@ export default function Calendar({ state, setState }) {
 
   const today    = new Date()
   const todayStr = toDs(today)
+
+  const allEvents = isConnected ? gcalEvents : state.events
 
   function calNav(dir) {
     setCalViewDate(prev => {
@@ -488,7 +504,7 @@ export default function Calendar({ state, setState }) {
     return calViewDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   }
 
-  const upcoming = state.events
+  const upcoming = allEvents
     .filter(e => e.date >= todayStr)
     .sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''))
     .slice(0, 5)
@@ -508,18 +524,27 @@ export default function Calendar({ state, setState }) {
               {v.charAt(0).toUpperCase() + v.slice(1)}
             </button>
           ))}
-          <span style={{ display: 'flex', alignItems: 'center', gap: '5px', marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--border)' }}>
-            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#ccc', display: 'inline-block', flexShrink: 0 }} />
-            <span style={{ fontSize: '11px', color: 'var(--text3)' }}>Google Calendar</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--border)' }}>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: isConnected ? '#4285f4' : '#ccc', display: 'inline-block', flexShrink: 0 }} />
+            {isConnected ? (
+              <>
+                <span style={{ fontSize: '11px', color: 'var(--text2)' }}>
+                  {gcalLoading ? 'Syncing…' : `${gcalEvents.length} events`}
+                </span>
+                <button className="btn-ghost" style={{ fontSize: '11px', padding: '2px 8px' }} onClick={disconnect}>Disconnect</button>
+              </>
+            ) : (
+              <button className="btn-ghost" style={{ fontSize: '11px', padding: '2px 8px' }} onClick={connect}>Connect Google Calendar</button>
+            )}
           </span>
         </div>
       </div>
 
       <div className="cal-sidebar">
         <div>
-          {calView === 'month' && <MonthView calViewDate={calViewDate} events={state.events} onSelectDay={handleSelectDay} onSelectEvent={handleSelectEvent} />}
-          {calView === 'week'  && <WeekView  calViewDate={calViewDate} events={state.events} onSelectDay={handleSelectDay} onSelectEvent={handleSelectEvent} />}
-          {calView === 'day'   && <DayView   calViewDate={calViewDate} events={state.events} onSelectDay={handleSelectDay} onSelectEvent={handleSelectEvent} />}
+          {calView === 'month' && <MonthView calViewDate={calViewDate} events={allEvents} onSelectDay={handleSelectDay} onSelectEvent={handleSelectEvent} />}
+          {calView === 'week'  && <WeekView  calViewDate={calViewDate} events={allEvents} onSelectDay={handleSelectDay} onSelectEvent={handleSelectEvent} />}
+          {calView === 'day'   && <DayView   calViewDate={calViewDate} events={allEvents} onSelectDay={handleSelectDay} onSelectEvent={handleSelectEvent} />}
         </div>
 
         <div>
@@ -531,7 +556,7 @@ export default function Calendar({ state, setState }) {
               const label = new Date(e.date + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' })
               return (
                 <div key={e.id} className="event-item" style={{ cursor: 'pointer' }} onClick={ev => handleSelectEvent(ev, e)}>
-                  <div className="event-dot" style={{ background: CAT_DOT[e.cat] || 'var(--accent)' }} />
+                  <div className="event-dot" style={{ background: e.calendarColor || CAT_DOT[e.cat] || 'var(--accent)' }} />
                   <div className="event-time">{e.start}</div>
                   <div style={{ flex: 1 }}>
                     <div className="event-title">{e.title}</div>
