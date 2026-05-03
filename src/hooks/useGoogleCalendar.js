@@ -76,6 +76,37 @@ export function useGoogleCalendar() {
           })
         })
       }))
+      // Fetch tasks
+      const listsRes  = await fetch(
+        'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const listsData = await listsRes.json()
+      const taskLists = listsData.items ?? []
+
+      await Promise.all(taskLists.map(async (list) => {
+        const url = `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(list.id)}/tasks` +
+          `?showCompleted=false&maxResults=100`
+        const tasksRes  = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+        const tasksData = await tasksRes.json()
+        const today = new Date().toISOString().split('T')[0]
+        ;(tasksData.items ?? []).forEach(task => {
+          allEvents.push({
+            id:            task.id,
+            title:         task.title ?? '(no title)',
+            date:          task.due ? task.due.slice(0, 10) : today,
+            start:         '',
+            end:           '',
+            isAllDay:      true,
+            isTask:        true,
+            cat:           `task_${list.id}`,
+            calendarName:  list.title,
+            calendarColor: '#1a73e8',
+            notes:         task.notes ?? '',
+          })
+        })
+      }))
+
       setEvents(allEvents)
     } catch (err) {
       console.error('Google Calendar fetch failed', err)

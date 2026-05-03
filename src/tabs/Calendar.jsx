@@ -13,7 +13,8 @@ const CATS_LIST = [
 
 function gcalEvStyle(e) {
   if (!e.calendarColor) return {}
-  return { background: e.calendarColor + '22', color: e.calendarColor }
+  if (e.isTask) return { background: '#e8f0fe', color: '#1a1a18', fontWeight: 600 }
+  return { background: e.calendarColor + '22', color: '#1a1a18' }
 }
 
 const HOUR_H  = 56
@@ -119,8 +120,8 @@ function EventPopup({ event, x, y, onClose, onDelete }) {
           <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '10px', background: evBg, color: evColor, fontWeight: 500 }}>
             {evLabel}
           </span>
-          <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '10px', background: 'var(--surface2)', color: 'var(--text3)', fontWeight: 500 }}>
-            {event.isAllDay ? 'All Day' : 'Event'}
+          <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '10px', background: event.isTask ? '#e8f0fe' : 'var(--surface2)', color: event.isTask ? '#1a73e8' : 'var(--text3)', fontWeight: 500 }}>
+            {event.isTask ? 'Task' : event.isAllDay ? 'All Day' : 'Event'}
           </span>
         </div>
 
@@ -322,7 +323,8 @@ function WeekView({ calViewDate, events, onSelectDay, onSelectEvent }) {
             return (
               <div key={i} style={{ flex: 1, borderLeft: '1px solid var(--border)', padding: '3px 3px', display: 'flex', flexWrap: 'wrap', gap: '2px', minHeight: '26px' }}>
                 {allDayMap[ds].map(e => (
-                  <div key={e.id} className={`gcal-allday-chip gcal-ev-${e.cat}`}
+                  <div key={e.id} className={`gcal-allday-chip${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`}
+                    style={{ ...gcalEvStyle(e), width: '100%', display: 'block' }}
                     onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
                     {e.title}
                   </div>
@@ -404,7 +406,8 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
           <div className="gcal-gutter gcal-allday-label">all‑day</div>
           <div className="gcal-allday-events">
             {allDay.map(e => (
-              <div key={e.id} className={`gcal-allday-chip gcal-ev-${e.cat}`}
+              <div key={e.id} className={`gcal-allday-chip${e.calendarColor ? '' : ' gcal-ev-' + e.cat}`}
+                style={{ ...gcalEvStyle(e), width: '100%', display: 'block' }}
                 onClick={ev => { ev.stopPropagation(); onSelectEvent(ev, e) }}>
                 {e.title}
               </div>
