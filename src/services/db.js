@@ -239,6 +239,15 @@ export async function updateContentItem(id, changes) {
   if (error) throw error
 }
 
+export async function updateContentOrder(items) {
+  const updates = items.map((item, sortOrder) =>
+    supabase.from('content_items').update({ sort_order: sortOrder }).eq('id', item.id)
+  )
+  const results = await Promise.all(updates)
+  const failed = results.find(({ error }) => error)
+  if (failed?.error) throw failed.error
+}
+
 export async function deleteContentItem(id) {
   const { error } = await supabase.from('content_items').delete().eq('id', id)
   if (error) throw error

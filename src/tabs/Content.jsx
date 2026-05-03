@@ -166,15 +166,14 @@ export default function Content({ state, setState, user, isDemo }) {
 
   function handleDrop(targetId) {
     if (dragSrcId.current == null || dragSrcId.current === targetId) return
-    setState(prev => {
-      const items = [...prev.content]
-      const srcIdx = items.findIndex(x => x.id === dragSrcId.current)
-      const tgtIdx = items.findIndex(x => x.id === targetId)
-      if (srcIdx === -1 || tgtIdx === -1) return prev
-      const [removed] = items.splice(srcIdx, 1)
-      items.splice(tgtIdx, 0, removed)
-      return { ...prev, content: items }
-    })
+    const items = [...state.content]
+    const srcIdx = items.findIndex(x => x.id === dragSrcId.current)
+    const tgtIdx = items.findIndex(x => x.id === targetId)
+    if (srcIdx === -1 || tgtIdx === -1) return
+    const [removed] = items.splice(srcIdx, 1)
+    items.splice(tgtIdx, 0, removed)
+    setState(prev => ({ ...prev, content: items }))
+    if (!isDemo) db.updateContentOrder(items).catch(console.error)
     dragSrcId.current = null
   }
 
