@@ -19,6 +19,10 @@ const uid = () => _nextId++
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
+function daysInMonth(year, month) {
+  return new Date(Number(year), Number(month), 0).getDate()
+}
+
 function getCostClass(cost, allCosts) {
   if (!allCosts.length) return ''
   const max = Math.max(...allCosts), min = Math.min(...allCosts), range = max - min
@@ -503,8 +507,8 @@ export default function Finance({ state, setState, user, isDemo }) {
                             }}
                             onBlur={ev => {
                               const dayNum = parseInt(ev.currentTarget.textContent.trim(), 10)
-                              if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31) {
-                                const [yr, mo] = e.date.split('-')
+                              const [yr, mo] = e.date.split('-')
+                              if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= daysInMonth(yr, mo)) {
                                 const newDate = `${yr}-${mo}-${String(dayNum).padStart(2, '0')}`
                                 ev.currentTarget.textContent = String(dayNum).padStart(2, '0')
                                 if (newDate !== e.date) setState(prev => {
