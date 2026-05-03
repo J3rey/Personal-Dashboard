@@ -737,7 +737,10 @@ export default function Finance({ state, setState, user, isDemo }) {
                       if (!isNaN(v) && v >= 0) {
                         const rounded = Math.round(v * 100) / 100
                         ev.currentTarget.textContent = rounded.toFixed(2)
-                        if (rounded !== i.amount) setState(prev => ({ ...prev, income: prev.income.map(x => x.id === i.id ? { ...x, amount: rounded } : x) }))
+                        if (rounded !== i.amount) {
+                          setState(prev => ({ ...prev, income: prev.income.map(x => x.id === i.id ? { ...x, amount: rounded } : x) }))
+                          if (!isDemo) db.updateIncome(i.id, { amount: rounded }).catch(console.error)
+                        }
                       } else {
                         ev.currentTarget.textContent = i.amount.toFixed(2)
                       }
