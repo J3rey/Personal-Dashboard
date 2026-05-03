@@ -1,4 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
+import {
+  DndContext,
+  KeyboardSensor,
+  MeasuringStrategy,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { PILLAR_COLORS } from '../constants/index.js'
 import * as db from '../services/db.js'
 
@@ -34,14 +51,32 @@ function AutoTextarea({ value, onBlur, placeholder }) {
   )
 }
 
-function ContentRow({ c, pillars, onStatusChange, onNoteChange, onDelete, onDragStart, onDrop, allowDrag }) {
+function ContentRow({
+  c,
+  pillars,
+  onStatusChange,
+  onNoteChange,
+  onDelete,
+  allowDrag,
+  activeDragId,
+  overDragId,
+  dropPosition,
+  sortable,
+}) {
   const [editingIdea, setEditingIdea] = useState(false)
   const [ideaVal, setIdeaVal] = useState(c.idea)
-  const [dragOver, setDragOver] = useState(false)
   const ideaRef = useRef(null)
   const p = pillars.find(x => x.id === c.pillarId)
   const col = p ? PILLAR_COLORS[p.colorIdx] || PILLAR_COLORS[0] : { bg: 'var(--surface2)', text: 'var(--text2)' }
   const statusCls = `status-${c.status.toLowerCase()}`
+  const {
+    attributes = {},
+    listeners = {},
+    setNodeRef,
+    transform,
+    transition,
+    isDragging = false,
+  } = sortable || {}
 
   useEffect(() => {
     if (editingIdea && ideaRef.current) {
@@ -52,19 +87,24 @@ function ContentRow({ c, pillars, onStatusChange, onNoteChange, onDelete, onDrag
   }, [editingIdea])
 
   const isDraggable = allowDrag && !editingIdea
+  const isDropTarget = overDragId === c.id && activeDragId !== c.id
+  const dropClass = isDropTarget ? `content-row--drop-${dropPosition}` : ''
 
   return (
     <tr
-      className={c.status === 'Posted' ? 'posted-row' : ''}
-      draggable={isDraggable}
+      ref={setNodeRef}
+      className={[
+        'content-row',
+        c.status === 'Posted' ? 'posted-row' : '',
+        isDragging ? 'content-row--dragging' : '',
+        isDropTarget ? 'content-row--drop-target' : '',
+        dropClass,
+      ].filter(Boolean).join(' ')}
       style={{
         cursor: isDraggable ? 'grab' : 'default',
-        boxShadow: dragOver ? 'inset 0 -2px 0 var(--accent)' : 'none',
+        transform: CSS.Transform.toString(transform),
+        transition,
       }}
-      onDragStart={e => { if (!isDraggable) return; e.dataTransfer.effectAllowed = 'move'; onDragStart(c.id) }}
-      onDragOver={e => { if (!allowDrag) return; e.preventDefault(); setDragOver(true) }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={e => { e.preventDefault(); setDragOver(false); onDrop(c.id) }}
     >
       <td style={{ fontSize: '13px' }}>
         {editingIdea ? (
@@ -84,7 +124,16 @@ function ContentRow({ c, pillars, onStatusChange, onNoteChange, onDelete, onDrag
         ) : (
           <span style={{ display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
             {allowDrag && (
-              <span style={{ color: 'var(--text3)', fontSize: '13px', lineHeight: 1.4, cursor: 'grab', flexShrink: 0, userSelect: 'none' }}>⠿</span>
+              <button
+                className="content-drag-handle"
+                type="button"
+                aria-label={`Move ${c.idea}`}
+                disabled={!isDraggable}
+                {...attributes}
+                {...listeners}
+              >
+                ⠿
+              </button>
             )}
             <span
               className="editable-cell"
@@ -112,6 +161,11 @@ function ContentRow({ c, pillars, onStatusChange, onNoteChange, onDelete, onDrag
   )
 }
 
+function SortableContentRow(props) {
+  const sortable = useSortable({ id: props.c.id })
+  return <ContentRow {...props} sortable={sortable} />
+}
+
 export default function Content({ state, setState, user, isDemo }) {
   const [postedCollapsed, setPostedCollapsed] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -126,7 +180,13 @@ export default function Content({ state, setState, user, isDemo }) {
   const newNotesRef = useRef(null)
   const newIdeaRef = useRef(null)
 
-  const dragSrcId = useRef(null)
+  const [activeDragId, setActiveDragId] = useState(null)
+  const [overDragId, setOverDragId] = useState(null)
+  const [dropPosition, setDropPosition] = useState('before')
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
 
   function setFilter(f) {
     setState(prev => ({ ...prev, contentFilter: f }))
@@ -160,21 +220,48 @@ export default function Content({ state, setState, user, isDemo }) {
     if (newNotesRef.current) newNotesRef.current.style.height = 'auto'
   }
 
-  function handleDragStart(id) {
-    dragSrcId.current = id
+  function handleDragStart(event) {
+    setActiveDragId(event.active.id)
+    setOverDragId(event.active.id)
+    setDropPosition('before')
   }
 
-  function handleDrop(targetId) {
-    if (dragSrcId.current == null || dragSrcId.current === targetId) return
-    const items = [...state.content]
-    const srcIdx = items.findIndex(x => x.id === dragSrcId.current)
-    const tgtIdx = items.findIndex(x => x.id === targetId)
-    if (srcIdx === -1 || tgtIdx === -1) return
-    const [removed] = items.splice(srcIdx, 1)
-    items.splice(tgtIdx, 0, removed)
-    setState(prev => ({ ...prev, content: items }))
-    if (!isDemo) db.updateContentOrder(items).catch(console.error)
-    dragSrcId.current = null
+  function handleDragOver(event) {
+    const nextOverId = event.over?.id ?? null
+    setOverDragId(nextOverId)
+    if (event.active.id == null || nextOverId == null || event.active.id === nextOverId) return
+    const activeIndex = active.findIndex(item => item.id === event.active.id)
+    const overIndex = active.findIndex(item => item.id === nextOverId)
+    if (activeIndex !== -1 && overIndex !== -1) {
+      setDropPosition(activeIndex < overIndex ? 'after' : 'before')
+    }
+  }
+
+  function handleDragEnd() {
+    setActiveDragId(null)
+    setOverDragId(null)
+    setDropPosition('before')
+  }
+
+  function handleSortEnd(event) {
+    const { active: activeItem, over } = event
+    if (over && activeItem.id !== over.id) {
+      const visibleIds = active.map(item => item.id)
+      const oldIndex = visibleIds.indexOf(activeItem.id)
+      const newIndex = visibleIds.indexOf(over.id)
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const movedVisibleIds = arrayMove(visibleIds, oldIndex, newIndex)
+        const visibleItems = new Map(state.content.filter(item => visibleIds.includes(item.id)).map(item => [item.id, item]))
+        const nextVisibleItems = movedVisibleIds.map(id => visibleItems.get(id)).filter(Boolean)
+        let visibleIdx = 0
+        const items = state.content.map(item => (
+          visibleIds.includes(item.id) ? nextVisibleItems[visibleIdx++] : item
+        ))
+        setState(prev => ({ ...prev, content: items }))
+        if (!isDemo) db.updateContentOrder(items).catch(console.error)
+      }
+    }
+    handleDragEnd()
   }
 
   async function savePillar() {
@@ -230,39 +317,52 @@ export default function Content({ state, setState, user, isDemo }) {
 
       {/* Content table */}
       <div className="content-table-wrap">
-        <table style={{ tableLayout: 'fixed' }}>
-          <colgroup>
-            <col style={{ width: '220px' }} />
-            <col style={{ width: '150px' }} />
-            <col style={{ width: '110px' }} />
-            <col style={{ width: '260px' }} />
-            <col style={{ width: '34px' }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>Reel Idea</th>
-              <th>Content Pillar</th>
-              <th>Status</th>
-              <th>Notes</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {active.map(c => (
-              <ContentRow
-                key={c.id}
-                c={c}
-                pillars={state.pillars}
-                onStatusChange={updateContent}
-                onNoteChange={(id, val) => updateContent(id, 'notes', val)}
-                onDelete={deleteContent}
-                onDragStart={handleDragStart}
-                onDrop={handleDrop}
-                allowDrag
-              />
-            ))}
-          </tbody>
-        </table>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleSortEnd}
+          onDragCancel={handleDragEnd}
+        >
+          <table style={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '220px' }} />
+              <col style={{ width: '150px' }} />
+              <col style={{ width: '110px' }} />
+              <col style={{ width: '260px' }} />
+              <col style={{ width: '34px' }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Reel Idea</th>
+                <th>Content Pillar</th>
+                <th>Status</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <SortableContext items={active.map(c => c.id)} strategy={verticalListSortingStrategy}>
+              <tbody>
+                {active.map(c => (
+                  <SortableContentRow
+                    key={c.id}
+                    c={c}
+                    pillars={state.pillars}
+                    onStatusChange={updateContent}
+                    onNoteChange={(id, val) => updateContent(id, 'notes', val)}
+                    onDelete={deleteContent}
+                    allowDrag
+                    activeDragId={activeDragId}
+                    overDragId={overDragId}
+                    dropPosition={dropPosition}
+                  />
+                ))}
+              </tbody>
+            </SortableContext>
+          </table>
+        </DndContext>
 
         {/* Posted section */}
         {posted.length > 0 && (
@@ -285,16 +385,18 @@ export default function Content({ state, setState, user, isDemo }) {
             </colgroup>
             <tbody>
               {posted.map(c => (
-                <ContentRow
-                  key={c.id}
+                  <ContentRow
+                    key={c.id}
                   c={c}
                   pillars={state.pillars}
                   onStatusChange={updateContent}
                   onNoteChange={(id, val) => updateContent(id, 'notes', val)}
                   onDelete={deleteContent}
-                  onDragStart={handleDragStart}
-                  onDrop={handleDrop}
                   allowDrag={false}
+                  activeDragId={activeDragId}
+                  overDragId={overDragId}
+                  dropPosition={dropPosition}
+                  sortable={null}
                 />
               ))}
             </tbody>
