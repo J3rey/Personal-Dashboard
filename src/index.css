@@ -316,7 +316,8 @@ nav {
 }
 .cal-cell {
   background: var(--surface);
-  min-height: 88px;
+  height: 110px;
+  overflow: hidden;
   padding: 6px;
   cursor: pointer;
   transition: background 0.1s;

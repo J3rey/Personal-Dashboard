@@ -68,7 +68,7 @@ function EventPopup({ event, x, y, onClose, onDelete }) {
   }, [])
 
   // smart positioning — flip if too close to edge
-  const W = 268, H = 200
+  const W = 268, H = 320
   const left = x + W + 16 > window.innerWidth  ? x - W - 8 : x + 12
   const top  = y + H      > window.innerHeight ? window.innerHeight - H - 12 : y
 
@@ -109,15 +109,18 @@ function EventPopup({ event, x, y, onClose, onDelete }) {
 
         {/* Notes */}
         {event.notes && (
-          <div style={{ fontSize: '12px', color: 'var(--text2)', background: 'var(--surface2)', borderRadius: '7px', padding: '8px 10px', marginBottom: '10px', lineHeight: 1.5 }}>
+          <div style={{ fontSize: '12px', color: 'var(--text2)', background: 'var(--surface2)', borderRadius: '7px', padding: '8px 10px', marginBottom: '10px', lineHeight: 1.5, wordBreak: 'break-word', overflowWrap: 'break-word', maxHeight: '120px', overflowY: 'auto' }}>
             {event.notes}
           </div>
         )}
 
-        {/* Category chip */}
-        <div style={{ marginBottom: '12px' }}>
+        {/* Category chip + event type */}
+        <div style={{ marginBottom: '12px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '10px', background: evBg, color: evColor, fontWeight: 500 }}>
             {evLabel}
+          </span>
+          <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '10px', background: 'var(--surface2)', color: 'var(--text3)', fontWeight: 500 }}>
+            {event.isAllDay ? 'All Day' : 'Event'}
           </span>
         </div>
 
@@ -448,12 +451,21 @@ export default function Calendar({ state, setState }) {
   const [calViewDate, setCalViewDate] = useState(new Date())
   const [createModal, setCreateModal] = useState(null)
   const [eventPopup, setEventPopup]   = useState(null) // { event, x, y }
+  const [hiddenCals, setHiddenCals]   = useState(new Set())
   const [form, setForm] = useState({ title: '', date: toDs(new Date()), start: '', end: '', cat: 'personal', notes: '' })
 
   const today    = new Date()
   const todayStr = toDs(today)
 
-  const allEvents = isConnected ? gcalEvents : state.events
+  function toggleCal(calId) {
+    setHiddenCals(prev => {
+      const next = new Set(prev)
+      next.has(calId) ? next.delete(calId) : next.add(calId)
+      return next
+    })
+  }
+
+  const allEvents = (isConnected ? gcalEvents : state.events).filter(e => !hiddenCals.has(e.cat))
 
   function calNav(dir) {
     setCalViewDate(prev => {
@@ -560,12 +572,32 @@ export default function Calendar({ state, setState }) {
                   <div className="event-time">{e.start}</div>
                   <div style={{ flex: 1 }}>
                     <div className="event-title">{e.title}</div>
-                    <div className="event-sub">{label}{e.notes ? ` · ${e.notes}` : ''}</div>
+                    <div className="event-sub">{label}{e.calendarName ? ` · ${e.calendarName}` : ''}</div>
                   </div>
                 </div>
               )
             })}
           </div>
+
+          {isConnected && calendars.length > 0 && (
+            <div className="side-card">
+              <h3>My Calendars</h3>
+              {calendars.map(cal => {
+                const hidden = hiddenCals.has(cal.id)
+                return (
+                  <div
+                    key={cal.id}
+                    onClick={() => toggleCal(cal.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', opacity: hidden ? 0.4 : 1, userSelect: 'none' }}
+                  >
+                    <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: hidden ? 'var(--border2)' : (cal.backgroundColor ?? 'var(--accent)'), flexShrink: 0, transition: 'background 0.15s' }} />
+                    <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1 }}>{cal.summary}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text3)' }}>{hidden ? 'hidden' : ''}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           <div className="side-card">
             <h3>Add Event</h3>

@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 
-const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly'
+
+function stripHtml(html) {
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return (div.textContent || div.innerText || '').trim()
+}
 const ONE_MONTH_AGO   = () => new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString()
 const THREE_MONTHS_FW = () => new Date(new Date().getFullYear(), new Date().getMonth() + 3, 1).toISOString()
 
@@ -62,10 +68,11 @@ export function useGoogleCalendar() {
             date:          (ev.start.date || ev.start.dateTime || '').slice(0, 10),
             start:         ev.start.dateTime ? ev.start.dateTime.slice(11, 16) : '',
             end:           ev.end?.dateTime  ? ev.end.dateTime.slice(11, 16)  : '',
+            isAllDay:      !!ev.start.date,
             cat:           cal.id,
             calendarName:  cal.summary,
             calendarColor: cal.backgroundColor ?? '#4a7c59',
-            notes:         ev.description ?? '',
+            notes:         ev.description ? stripHtml(ev.description) : '',
           })
         })
       }))
