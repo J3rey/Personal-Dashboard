@@ -513,6 +513,7 @@ export default function Finance({ state, setState, user, isDemo }) {
                                   regulars.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
                                   return { ...prev, expenses: [...regulars, ...specials] }
                                 })
+                                if (newDate !== e.date && !isDemo) db.updateTransaction(e.id, { date: newDate }).catch(console.error)
                               } else {
                                 ev.currentTarget.textContent = e.date.slice(8)
                               }
@@ -521,7 +522,13 @@ export default function Finance({ state, setState, user, isDemo }) {
                         </td>
                         <td className="editable-cell" onDoubleClick={() => editExpenseCat(e.id)}><span className={`cat-badge cat-${e.cat}`}>{e.cat}</span></td>
                         <td suppressContentEditableWarning contentEditable style={{ cursor: 'text' }}
-                          onBlur={ev => { const v = ev.currentTarget.textContent; if (v !== e.detail) setState(prev => ({ ...prev, expenses: prev.expenses.map(x => x.id === e.id ? { ...x, detail: v } : x) })) }}
+                          onBlur={ev => {
+                            const v = ev.currentTarget.textContent
+                            if (v !== e.detail) {
+                              setState(prev => ({ ...prev, expenses: prev.expenses.map(x => x.id === e.id ? { ...x, detail: v } : x) }))
+                              if (!isDemo) db.updateTransaction(e.id, { detail: v }).catch(console.error)
+                            }
+                          }}
                           onKeyDown={ev => { if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur() } if (ev.key === 'Escape') { ev.currentTarget.textContent = e.detail; ev.currentTarget.blur() } }}
                         >{e.detail}</td>
                         <td style={{ textAlign: 'right' }}>
@@ -541,7 +548,10 @@ export default function Finance({ state, setState, user, isDemo }) {
                                 if (!isNaN(v) && v >= 0) {
                                   const rounded = Math.round(v * 100) / 100
                                   ev.currentTarget.textContent = rounded.toFixed(2)
-                                  if (rounded !== e.cost) setState(prev => ({ ...prev, expenses: prev.expenses.map(x => x.id === e.id ? { ...x, cost: rounded } : x) }))
+                                  if (rounded !== e.cost) {
+                                    setState(prev => ({ ...prev, expenses: prev.expenses.map(x => x.id === e.id ? { ...x, cost: rounded } : x) }))
+                                    if (!isDemo) db.updateTransaction(e.id, { cost: rounded }).catch(console.error)
+                                  }
                                 } else {
                                   ev.currentTarget.textContent = e.cost.toFixed(2)
                                 }
