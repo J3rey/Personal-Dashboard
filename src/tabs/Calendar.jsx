@@ -690,7 +690,7 @@ function handleSelectEvent(mouseEvt, event) {
   return (
     <div className="panel">
       <div className="cal-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
           <button className="btn-ghost" onClick={() => calNav(-1)}>←</button>
           <span className="cal-label">{getCalLabel()}</span>
           <button className="btn-ghost" onClick={() => calNav(1)}>→</button>
@@ -743,7 +743,7 @@ function handleSelectEvent(mouseEvt, event) {
                 <div key={e.id} className="event-item" style={{ cursor: 'pointer' }} onClick={ev => handleSelectEvent(ev, e)}>
                   <div className="event-dot" style={{ background: e.calendarColor || CAT_DOT[e.cat] || 'var(--accent)' }} />
                   <div className="event-time">{formatTime12(e.start)}</div>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="event-title"><EventLabel event={e} /></div>
                     <div className="event-sub">{label}{e.calendarName ? ` · ${e.calendarName}` : ''}</div>
                   </div>
@@ -764,7 +764,7 @@ function handleSelectEvent(mouseEvt, event) {
                     style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', opacity: hidden ? 0.4 : 1, userSelect: 'none' }}
                   >
                     <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: hidden ? 'var(--border2)' : (cal.backgroundColor ?? 'var(--accent)'), flexShrink: 0, transition: 'background 0.15s' }} />
-                    <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1 }}>{cal.summary}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{cal.summary}</span>
                     <span style={{ fontSize: '10px', color: 'var(--text3)' }}>{hidden ? 'hidden' : ''}</span>
                   </div>
                 )

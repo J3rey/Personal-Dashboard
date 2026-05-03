@@ -575,7 +575,7 @@ export default function Finance({ state, setState, user, isDemo }) {
 
             {/* Add expense row */}
             <div style={{ padding: '10px 16px', borderTop: '2px solid var(--border)', background: 'var(--surface2)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '52px 72px 1fr 70px 150px 30px', gap: '5px', alignItems: 'center', marginBottom: '6px' }}>
+              <div className="finance-add-row">
                 <input className="form-input" type="date" value={newDate} onChange={e => setNewDate(e.target.value)} style={{ fontSize: '11px', padding: '4px 5px' }} />
                 <select className="form-select" value={newCat} onChange={e => setNewCat(e.target.value)} style={{ fontSize: '11px', padding: '4px 5px', width: '100%' }}>
                   {CATS.map(c => <option key={c}>{c}</option>)}
