@@ -1,4 +1,18 @@
 node_modules
 dist
+
+# env files — .env.example is safe to commit, real secrets are not
 .env
 .env.local
+.env.*.local
+
+# editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vite
+*.local
