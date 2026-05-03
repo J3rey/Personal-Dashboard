@@ -10,7 +10,7 @@ import { useAppData } from './hooks/useAppData.js'
 export default function App() {
   const { user, login, logout } = useAuth()
   const [activeTab, setActiveTab] = useState('calendar')
-  const { state, setState, loading, isDemo } = useAppData(user)
+  const { state, setState, loading, error: dataError, isDemo } = useAppData(user)
 
   if (user === undefined || (user && loading)) {
     return (
@@ -30,10 +30,22 @@ export default function App() {
         onLogout={logout}
         user={user}
       />
-      {activeTab === 'calendar' && <Calendar state={state} setState={setState} />}
-      {activeTab === 'finance'  && <Finance  state={state} setState={setState} user={user} isDemo={isDemo} />}
-      {activeTab === 'habits'   && <Habits   state={state} setState={setState} user={user} isDemo={isDemo} />}
-      {activeTab === 'content'  && <Content  state={state} setState={setState} user={user} isDemo={isDemo} />}
+      {user && dataError ? (
+        <div className="panel">
+          <div className="side-card">
+            <h3>Unable to load dashboard data</h3>
+            <div style={{ fontSize: '13px', color: 'var(--text2)' }}>{dataError}</div>
+          </div>
+        </div>
+      ) : null}
+      {user && dataError ? null : (
+        <>
+          {activeTab === 'calendar' && <Calendar state={state} setState={setState} />}
+          {activeTab === 'finance'  && <Finance  state={state} setState={setState} user={user} isDemo={isDemo} />}
+          {activeTab === 'habits'   && <Habits   state={state} setState={setState} user={user} isDemo={isDemo} />}
+          {activeTab === 'content'  && <Content  state={state} setState={setState} user={user} isDemo={isDemo} />}
+        </>
+      )}
     </>
   )
 }
