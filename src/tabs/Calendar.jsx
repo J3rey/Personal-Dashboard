@@ -448,7 +448,16 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
 
 // ── Main Calendar ──────────────────────────────────────────────────────────────
 export default function Calendar({ state, setState }) {
-  const { isConnected, events: gcalEvents, calendars, loading: gcalLoading, connect, disconnect } = useGoogleCalendar()
+  const {
+    isConnected,
+    events: gcalEvents,
+    calendars,
+    loading: gcalLoading,
+    authStatus,
+    reconnectNeeded,
+    connect,
+    disconnect,
+  } = useGoogleCalendar()
 
   const [calView, setCalView]         = useState('month')
   const [calViewDate, setCalViewDate] = useState(new Date())
@@ -540,7 +549,7 @@ export default function Calendar({ state, setState }) {
             </button>
           ))}
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--border)' }}>
-            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: isConnected ? '#4285f4' : '#ccc', display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: isConnected ? '#4285f4' : reconnectNeeded ? '#fbbc04' : '#ccc', display: 'inline-block', flexShrink: 0 }} />
             {isConnected ? (
               <>
                 <span style={{ fontSize: '11px', color: 'var(--text2)' }}>
@@ -549,7 +558,14 @@ export default function Calendar({ state, setState }) {
                 <button className="btn-ghost" style={{ fontSize: '11px', padding: '2px 8px' }} onClick={disconnect}>Disconnect</button>
               </>
             ) : (
-              <button className="btn-ghost" style={{ fontSize: '11px', padding: '2px 8px' }} onClick={connect}>Connect Google Calendar</button>
+              <>
+                {authStatus === 'reconnecting' && (
+                  <span style={{ fontSize: '11px', color: 'var(--text2)' }}>Reconnecting…</span>
+                )}
+                <button className="btn-ghost" style={{ fontSize: '11px', padding: '2px 8px' }} onClick={connect}>
+                  {reconnectNeeded ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
+                </button>
+              </>
             )}
           </span>
         </div>

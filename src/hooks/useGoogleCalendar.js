@@ -1,37 +1,104 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const SCOPE        = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly'
-const STORAGE_KEY  = 'gcal_was_connected'
+const FLAG_KEY     = 'gcal_connected'   // permanent — user wants to stay connected
+const TOKEN_KEY    = 'gcal_token'       // expires after 55 min
+const EXPIRES_KEY  = 'gcal_expires'
+const TOKEN_REFRESH_MARGIN_MS = 60 * 1000
 
 function stripHtml(html) {
   const div = document.createElement('div')
   div.innerHTML = html
   return (div.textContent || div.innerText || '').trim()
 }
+
 const ONE_MONTH_AGO   = () => new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString()
 const THREE_MONTHS_FW = () => new Date(new Date().getFullYear(), new Date().getMonth() + 3, 1).toISOString()
 
-export function useGoogleCalendar() {
-  const [accessToken, setAccessToken] = useState(null)
-  const [events, setEvents]           = useState([])
-  const [calendars, setCalendars]     = useState([])
-  const [loading, setLoading]         = useState(false)
-  const [tokenClient, setTokenClient] = useState(null)
+function wantsStoredConnection() {
+  try {
+    return localStorage.getItem(FLAG_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
+function readStoredToken() {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY)
+    const expires = Number(localStorage.getItem(EXPIRES_KEY) || '0')
+    if (token && Date.now() + TOKEN_REFRESH_MARGIN_MS < expires) return token
+  } catch {}
+  return null
+}
+
+function storeToken(resp) {
+  const expiresInMs = Number(resp.expires_in || 3600) * 1000
+  const expiresAt = Date.now() + Math.max(expiresInMs - TOKEN_REFRESH_MARGIN_MS, TOKEN_REFRESH_MARGIN_MS)
+
+  localStorage.setItem(FLAG_KEY, '1')
+  localStorage.setItem(TOKEN_KEY, resp.access_token)
+  localStorage.setItem(EXPIRES_KEY, String(expiresAt))
+}
+
+function clearStoredToken({ keepConnectionPreference = false } = {}) {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(EXPIRES_KEY)
+  if (!keepConnectionPreference) localStorage.removeItem(FLAG_KEY)
+}
+
+export function useGoogleCalendar() {
+  const [accessToken, setAccessToken] = useState(() => {
+    return readStoredToken()
+  })
+  const [events, setEvents]       = useState([])
+  const [calendars, setCalendars] = useState([])
+  const [loading, setLoading]     = useState(false)
+  const [authStatus, setAuthStatus] = useState(() => {
+    if (readStoredToken()) return 'connected'
+    if (wantsStoredConnection()) return 'reconnecting'
+    return 'disconnected'
+  })
+  const clientRef                 = useRef(null)
+  const pendingInteractiveRef      = useRef(false)
+
+  // Fetch calendar data whenever we have a valid token
+  useEffect(() => {
+    if (accessToken) fetchAll(accessToken)
+  }, [accessToken])
+
+  // Init GIS token client
   useEffect(() => {
     function init() {
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
         scope: SCOPE,
         callback: (resp) => {
-          if (resp.error) return
-          localStorage.setItem(STORAGE_KEY, '1')
+          if (resp.error || !resp.access_token) {
+            console.warn('GCal auth error', resp.error || resp)
+            clearStoredToken({ keepConnectionPreference: wantsStoredConnection() })
+            setAccessToken(null)
+            setEvents([])
+            setCalendars([])
+            setAuthStatus(wantsStoredConnection() ? 'needsInteraction' : 'disconnected')
+            return
+          }
+          storeToken(resp)
+          pendingInteractiveRef.current = false
+          setAuthStatus('connected')
           setAccessToken(resp.access_token)
         },
       })
-      setTokenClient(client)
-      // Silent re-auth if user previously connected
-      if (localStorage.getItem(STORAGE_KEY)) {
+      clientRef.current = client
+
+      const storedToken = readStoredToken()
+      if (storedToken) {
+        setAccessToken(storedToken)
+        setAuthStatus('connected')
+      } else if (pendingInteractiveRef.current) {
+        client.requestAccessToken({ prompt: '' })
+      } else if (wantsStoredConnection()) {
+        setAuthStatus('reconnecting')
         client.requestAccessToken({ prompt: 'none' })
       }
     }
@@ -46,10 +113,6 @@ export function useGoogleCalendar() {
     }
   }, [])
 
-  useEffect(() => {
-    if (accessToken) fetchAll(accessToken)
-  }, [accessToken])
-
   async function fetchAll(token) {
     setLoading(true)
     try {
@@ -58,7 +121,12 @@ export function useGoogleCalendar() {
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const calData = await calRes.json()
-      const cals    = calData.items ?? []
+      if (calRes.status === 401 || calData.error?.code === 401) {
+        handleExpiredToken()
+        return
+      }
+      if (calData.error) { console.error('Calendar API error', calData.error); return }
+      const cals = calData.items ?? []
       setCalendars(cals)
 
       const allEvents = []
@@ -75,6 +143,7 @@ export function useGoogleCalendar() {
             start:         ev.start.dateTime ? ev.start.dateTime.slice(11, 16) : '',
             end:           ev.end?.dateTime  ? ev.end.dateTime.slice(11, 16)  : '',
             isAllDay:      !!ev.start.date,
+            isTask:        false,
             cat:           cal.id,
             calendarName:  cal.summary,
             calendarColor: cal.backgroundColor ?? '#4a7c59',
@@ -82,20 +151,21 @@ export function useGoogleCalendar() {
           })
         })
       }))
+
       // Fetch tasks
       const listsRes  = await fetch(
         'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const listsData = await listsRes.json()
-      const taskLists = listsData.items ?? []
+      const taskLists = listsData.error ? [] : (listsData.items ?? [])
 
+      const today = new Date().toISOString().split('T')[0]
       await Promise.all(taskLists.map(async (list) => {
         const url = `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(list.id)}/tasks` +
           `?showCompleted=false&maxResults=100`
         const tasksRes  = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
         const tasksData = await tasksRes.json()
-        const today = new Date().toISOString().split('T')[0]
         ;(tasksData.items ?? []).forEach(task => {
           allEvents.push({
             id:            task.id,
@@ -121,12 +191,36 @@ export function useGoogleCalendar() {
     }
   }
 
-  function connect() { tokenClient?.requestAccessToken() }
+  function handleExpiredToken() {
+    clearStoredToken({ keepConnectionPreference: true })
+    setAccessToken(null)
+    setEvents([])
+    setCalendars([])
+
+    if (clientRef.current) {
+      setAuthStatus('reconnecting')
+      clientRef.current.requestAccessToken({ prompt: 'none' })
+    } else {
+      setAuthStatus('needsInteraction')
+    }
+  }
+
+  function connect() {
+    localStorage.setItem(FLAG_KEY, '1')
+    setAuthStatus('reconnecting')
+
+    if (clientRef.current) {
+      clientRef.current.requestAccessToken({ prompt: '' })
+    } else {
+      pendingInteractiveRef.current = true
+    }
+  }
 
   function disconnect() {
     if (accessToken) window.google?.accounts.oauth2.revoke(accessToken, () => {})
-    localStorage.removeItem(STORAGE_KEY)
+    clearStoredToken()
     setAccessToken(null)
+    setAuthStatus('disconnected')
     setEvents([])
     setCalendars([])
   }
@@ -136,6 +230,8 @@ export function useGoogleCalendar() {
     events,
     calendars,
     loading,
+    authStatus,
+    reconnectNeeded: authStatus === 'needsInteraction',
     connect,
     disconnect,
   }
