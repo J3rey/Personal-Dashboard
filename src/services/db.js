@@ -247,9 +247,8 @@ export async function deleteContentItem(id) {
 // ── Fetch all on login ────────────────────────────────────────────────────────
 
 export async function fetchAll(userId) {
-  const [events, expenses, income, habits, habitChecks, { pillars, content }] =
+  const [expenses, income, habits, habitChecks, { pillars, content }] =
     await Promise.all([
-      fetchEvents(userId),
       fetchTransactions(userId),
       fetchIncome(userId),
       fetchHabits(userId),
@@ -257,7 +256,7 @@ export async function fetchAll(userId) {
       fetchContent(userId),
     ])
   return {
-    events, expenses, income,
+    events: [], expenses, income,
     habits, habitChecks, habitWeekOffset: 0,
     pillars, content, contentFilter: 'all',
     nextId: 200,
