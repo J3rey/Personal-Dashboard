@@ -147,9 +147,9 @@ export default function Content({ state, setState, user, isDemo }) {
 
   async function addContentRow() {
     if (!newIdea.trim()) return
-    const item = { idea: newIdea.trim(), pillarId: newPillar, status: newStatus, notes: newNotes }
+    const item = { idea: newIdea.trim(), pillarId: Number(newPillar), status: newStatus, notes: newNotes }
     if (isDemo) {
-      setState(prev => ({ ...prev, content: [...prev.content, { id: uid(), ...item, pillarId: parseInt(newPillar) }] }))
+      setState(prev => ({ ...prev, content: [...prev.content, { id: uid(), ...item }] }))
     } else {
       const id = await db.insertContentItem(user.id, item, state.content.length).catch(console.error)
       if (id) setState(prev => ({ ...prev, content: [...prev.content, { id, ...item }] }))
