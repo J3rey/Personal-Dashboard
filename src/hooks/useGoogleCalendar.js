@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 
-const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly'
+const SCOPE        = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly'
+const STORAGE_KEY  = 'gcal_was_connected'
 
 function stripHtml(html) {
   const div = document.createElement('div')
@@ -23,11 +24,16 @@ export function useGoogleCalendar() {
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
         scope: SCOPE,
         callback: (resp) => {
-          if (resp.error) { console.error('GCal OAuth error', resp); return }
+          if (resp.error) return
+          localStorage.setItem(STORAGE_KEY, '1')
           setAccessToken(resp.access_token)
         },
       })
       setTokenClient(client)
+      // Silent re-auth if user previously connected
+      if (localStorage.getItem(STORAGE_KEY)) {
+        client.requestAccessToken({ prompt: 'none' })
+      }
     }
 
     if (window.google?.accounts?.oauth2) {
@@ -119,6 +125,7 @@ export function useGoogleCalendar() {
 
   function disconnect() {
     if (accessToken) window.google?.accounts.oauth2.revoke(accessToken, () => {})
+    localStorage.removeItem(STORAGE_KEY)
     setAccessToken(null)
     setEvents([])
     setCalendars([])
