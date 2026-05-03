@@ -628,7 +628,7 @@ export default function Calendar({ state, setState }) {
     })
   }
 
-  const allEvents = (isConnected ? gcalEvents : state.events).filter(e => !hiddenCals.has(e.cat))
+  const allEvents = (isConnected ? [...state.events, ...gcalEvents] : state.events).filter(e => !hiddenCals.has(e.cat))
 
   function calNav(dir) {
     setCalViewDate(prev => {
