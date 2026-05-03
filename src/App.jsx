@@ -32,8 +32,8 @@ export default function App() {
       />
       {activeTab === 'calendar' && <Calendar state={state} setState={setState} />}
       {activeTab === 'finance'  && <Finance  state={state} setState={setState} />}
-      {activeTab === 'habits'   && <Habits   state={state} setState={setState} />}
-      {activeTab === 'content'  && <Content  state={state} setState={setState} />}
+      {activeTab === 'habits'   && <Habits   state={state} setState={setState} user={user} isDemo={isDemo} />}
+      {activeTab === 'content'  && <Content  state={state} setState={setState} user={user} isDemo={isDemo} />}
     </>
   )
 }

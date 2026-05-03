@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { PILLAR_COLORS } from '../constants/index.js'
+import * as db from '../services/db.js'
 
 let _nextId = 500
 const uid = () => _nextId++
@@ -111,7 +112,7 @@ function ContentRow({ c, pillars, onStatusChange, onNoteChange, onDelete, onDrag
   )
 }
 
-export default function Content({ state, setState }) {
+export default function Content({ state, setState, user, isDemo }) {
   const [postedCollapsed, setPostedCollapsed] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedColor, setSelectedColor] = useState(0)
@@ -136,18 +137,23 @@ export default function Content({ state, setState }) {
       ...prev,
       content: prev.content.map(c => c.id === id ? { ...c, [field]: val } : c),
     }))
+    if (!isDemo) db.updateContentItem(id, { [field]: val }).catch(console.error)
   }
 
   function deleteContent(id) {
     setState(prev => ({ ...prev, content: prev.content.filter(c => c.id !== id) }))
+    if (!isDemo) db.deleteContentItem(id).catch(console.error)
   }
 
-  function addContentRow() {
+  async function addContentRow() {
     if (!newIdea.trim()) return
-    setState(prev => ({
-      ...prev,
-      content: [...prev.content, { id: uid(), idea: newIdea.trim(), pillarId: parseInt(newPillar), status: newStatus, notes: newNotes }],
-    }))
+    const item = { idea: newIdea.trim(), pillarId: newPillar, status: newStatus, notes: newNotes }
+    if (isDemo) {
+      setState(prev => ({ ...prev, content: [...prev.content, { id: uid(), ...item, pillarId: parseInt(newPillar) }] }))
+    } else {
+      const id = await db.insertContentItem(user.id, item, state.content.length).catch(console.error)
+      if (id) setState(prev => ({ ...prev, content: [...prev.content, { id, ...item }] }))
+    }
     setNewIdea('')
     setNewNotes('')
     if (newIdeaRef.current) newIdeaRef.current.style.height = 'auto'
@@ -172,17 +178,21 @@ export default function Content({ state, setState }) {
     dragSrcId.current = null
   }
 
-  function savePillar() {
+  async function savePillar() {
     if (!newPillarName.trim()) return
-    setState(prev => ({
-      ...prev,
-      pillars: [...prev.pillars, { id: uid(), name: newPillarName.trim(), colorIdx: selectedColor }],
-    }))
+    const pillar = { name: newPillarName.trim(), colorIdx: selectedColor }
+    if (isDemo) {
+      setState(prev => ({ ...prev, pillars: [...prev.pillars, { id: uid(), ...pillar }] }))
+    } else {
+      const id = await db.insertPillar(user.id, pillar, state.pillars.length).catch(console.error)
+      if (id) setState(prev => ({ ...prev, pillars: [...prev.pillars, { id, ...pillar }] }))
+    }
     setNewPillarName('')
   }
 
   function deletePillar(id) {
     setState(prev => ({ ...prev, pillars: prev.pillars.filter(p => p.id !== id) }))
+    if (!isDemo) db.deletePillar(id).catch(console.error)
   }
 
   const f = state.contentFilter

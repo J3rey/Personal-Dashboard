@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import * as db from '../services/db.js'
 
 let _nextId = 400
 const uid = () => _nextId++
@@ -19,7 +20,7 @@ const CheckIcon = () => (
   </svg>
 )
 
-export default function Habits({ state, setState }) {
+export default function Habits({ state, setState, user, isDemo }) {
   const [habitType, setHabitType] = useState('weekly')
   const [nameInput, setNameInput] = useState('')
   const [goalInput, setGoalInput] = useState(3)
@@ -35,23 +36,29 @@ export default function Habits({ state, setState }) {
 
   function toggleHabit(habitId, date) {
     const key = `${habitId}_${date}`
+    const newChecked = !state.habitChecks[key]
     setState(prev => ({
       ...prev,
-      habitChecks: { ...prev.habitChecks, [key]: !prev.habitChecks[key] },
+      habitChecks: { ...prev.habitChecks, [key]: newChecked },
     }))
+    if (!isDemo) db.toggleHabitLog(user.id, habitId, date, newChecked).catch(console.error)
   }
 
   function deleteHabit(id) {
     setState(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }))
+    if (!isDemo) db.deleteHabit(id).catch(console.error)
   }
 
-  function addHabit() {
+  async function addHabit() {
     if (!nameInput.trim()) return
     const isDai = habitType === 'daily'
-    setState(prev => ({
-      ...prev,
-      habits: [...prev.habits, { id: uid(), name: nameInput.trim(), type: habitType, goal: isDai ? 7 : goalInput, daily: isDai }],
-    }))
+    const habit = { name: nameInput.trim(), type: habitType, goal: isDai ? 7 : goalInput, daily: isDai }
+    if (isDemo) {
+      setState(prev => ({ ...prev, habits: [...prev.habits, { id: uid(), ...habit }] }))
+    } else {
+      const id = await db.insertHabit(user.id, habit, state.habits.length).catch(console.error)
+      if (id) setState(prev => ({ ...prev, habits: [...prev.habits, { id, ...habit }] }))
+    }
     setNameInput('')
   }
 
