@@ -37,7 +37,7 @@ function isOtherPillar(pillar) {
   return pillar.name.trim().toLowerCase() === 'other'
 }
 
-function sortPillarsForFilters(pillars) {
+function sortPillarsForDisplay(pillars) {
   return [...pillars].sort((a, b) => Number(isOtherPillar(a)) - Number(isOtherPillar(b)))
 }
 
@@ -83,7 +83,7 @@ function PillarPopover({ pillars, currentId, rect, onSelect, onClose }) {
       boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '6px', display: 'flex',
       flexDirection: 'column', gap: '3px', minWidth: '140px',
     }}>
-      {pillars.map(p => {
+      {sortPillarsForDisplay(pillars).map(p => {
         const col = PILLAR_COLORS[p.colorIdx] || PILLAR_COLORS[0]
         const isActive = sameId(p.id, currentId)
         return (
@@ -391,7 +391,7 @@ export default function Content({ state, setState, user, isDemo }) {
   }
 
   const f = state.contentFilter
-  const filterPillars = sortPillarsForFilters(state.pillars)
+  const displayPillars = sortPillarsForDisplay(state.pillars)
   const active = state.content.filter(c => c.status !== 'Posted' && (f === 'all' || sameId(c.pillarId, f)))
   const posted = state.content.filter(c => c.status === 'Posted' && (f === 'all' || sameId(c.pillarId, f)))
 
@@ -408,7 +408,7 @@ export default function Content({ state, setState, user, isDemo }) {
           >
             All
           </button>
-          {filterPillars.map(p => {
+          {displayPillars.map(p => {
             const c = PILLAR_COLORS[p.colorIdx] || PILLAR_COLORS[0]
             return (
               <button
@@ -540,7 +540,7 @@ export default function Content({ state, setState, user, isDemo }) {
               </td>
               <td>
                 <select className="form-select" value={newPillar} onChange={e => setNewPillar(resolvePillarId(state.pillars, e.target.value))} style={{ fontSize: '12px', padding: '4px 8px' }}>
-                  {state.pillars.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {displayPillars.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </td>
               <td>
