@@ -484,35 +484,56 @@ export default function Content({ state, setState, user, isDemo }) {
         )}
 
         {/* Add row */}
-        <div className="add-content-row">
-          <textarea
-            ref={newIdeaRef}
-            className="form-input"
-            placeholder="Reel idea..."
-            value={newIdea}
-            rows={1}
-            onChange={e => { setNewIdea(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addContentRow() } }}
-            style={{ fontSize: '12px', padding: '5px 8px', resize: 'none', overflow: 'hidden' }}
-          />
-          <select className="form-select" value={newPillar} onChange={e => setNewPillar(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px' }}>
-            {state.pillars.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <select className="form-select" value={newStatus} onChange={e => setNewStatus(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px' }}>
-            {STATUSES.map(s => <option key={s}>{s}</option>)}
-          </select>
-          <textarea
-            ref={newNotesRef}
-            className="form-input"
-            placeholder="Notes..."
-            rows={1}
-            value={newNotes}
-            onChange={e => { setNewNotes(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addContentRow() } }}
-            style={{ fontSize: '12px', padding: '5px 8px' }}
-          />
-          <button className="btn-primary" onClick={addContentRow} style={{ width: 'auto', padding: '5px 14px', fontSize: '12px', whiteSpace: 'nowrap' }}>Add</button>
-        </div>
+        <table className="add-content-table" style={{ tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '220px' }} />
+            <col style={{ width: '150px' }} />
+            <col style={{ width: '110px' }} />
+            <col style={{ width: '260px' }} />
+            <col style={{ width: '34px' }} />
+          </colgroup>
+          <tbody>
+            <tr>
+              <td>
+                <textarea
+                  ref={newIdeaRef}
+                  className="form-input"
+                  placeholder="Reel idea..."
+                  value={newIdea}
+                  rows={1}
+                  onChange={e => { setNewIdea(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addContentRow() } }}
+                  style={{ fontSize: '12px', padding: '5px 8px', resize: 'none', overflow: 'hidden' }}
+                />
+              </td>
+              <td>
+                <select className="form-select" value={newPillar} onChange={e => setNewPillar(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px' }}>
+                  {state.pillars.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </td>
+              <td>
+                <select className="form-select" value={newStatus} onChange={e => setNewStatus(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px' }}>
+                  {STATUSES.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </td>
+              <td>
+                <textarea
+                  ref={newNotesRef}
+                  className="form-input"
+                  placeholder="Notes..."
+                  rows={1}
+                  value={newNotes}
+                  onChange={e => { setNewNotes(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addContentRow() } }}
+                  style={{ fontSize: '12px', padding: '5px 8px' }}
+                />
+              </td>
+              <td>
+                <button className="btn-primary" onClick={addContentRow} style={{ width: '100%', padding: '5px 0', fontSize: '12px', whiteSpace: 'nowrap' }}>Add</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       {/* Pillar Manager Modal */}
