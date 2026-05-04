@@ -287,7 +287,7 @@ export default function Content({ state, setState, user, isDemo }) {
     }
     setNewIdea('')
     setNewNotes('')
-    if (newIdeaRef.current) newIdeaRef.current.style.height = 'auto'
+    if (newIdeaRef.current) { newIdeaRef.current.style.height = 'auto'; newIdeaRef.current.focus() }
     if (newNotesRef.current) newNotesRef.current.style.height = 'auto'
   }
 
