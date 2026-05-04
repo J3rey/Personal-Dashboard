@@ -174,11 +174,15 @@ export default function Content({ state, setState, user, isDemo }) {
 
   // Add content form
   const [newIdea, setNewIdea]     = useState('')
-  const [newPillar, setNewPillar] = useState(state.pillars[0]?.id || 1)
+  const [newPillar, setNewPillar] = useState(state.pillars[0]?.id ?? '')
   const [newStatus, setNewStatus] = useState('Idea')
   const [newNotes, setNewNotes]   = useState('')
   const newNotesRef = useRef(null)
   const newIdeaRef = useRef(null)
+
+  useEffect(() => {
+    if (!newPillar && state.pillars.length > 0) setNewPillar(state.pillars[0].id)
+  }, [state.pillars])
 
   const [activeDragId, setActiveDragId] = useState(null)
   const [overDragId, setOverDragId] = useState(null)
@@ -214,7 +218,7 @@ export default function Content({ state, setState, user, isDemo }) {
 
   async function addContentRow() {
     if (!newIdea.trim()) return
-    const item = { idea: newIdea.trim(), pillarId: Number(newPillar), status: newStatus, notes: newNotes }
+    const item = { idea: newIdea.trim(), pillarId: newPillar, status: newStatus, notes: newNotes }
     if (isDemo) {
       setState(prev => ({ ...prev, content: [...prev.content, { id: uid(), ...item }] }))
     } else {
