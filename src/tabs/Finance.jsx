@@ -485,7 +485,7 @@ export default function Finance({ state, setState, user, isDemo }) {
                       </tr>
                     )
                     const cls = getCostClass(e.cost, allCosts)
-                    const ds = e.date ? e.date.slice(5).replace('-', '/') : ''
+                    const ds = e.date ? e.date.slice(8) + '/' + e.date.slice(5, 7) : ''
                     const badge = e.type === 'paid'
                       ? <span className="badge badge-paid">p/{e.person ? ' ' + e.person : ''}</span>
                       : e.type === 'for'
@@ -494,7 +494,6 @@ export default function Finance({ state, setState, user, isDemo }) {
                     return (
                       <tr key={e.id}>
                         <td style={{ fontSize: '11px', color: 'var(--text2)', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>
-                          <span style={{ pointerEvents: 'none', userSelect: 'none' }}>{e.date.slice(5, 7)}/</span>
                           <span suppressContentEditableWarning contentEditable style={{ cursor: 'text', outline: 'none' }}
                             onKeyDown={ev => {
                               if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur(); return }
@@ -524,6 +523,7 @@ export default function Finance({ state, setState, user, isDemo }) {
                               }
                             }}
                           >{e.date.slice(8)}</span>
+                          <span style={{ pointerEvents: 'none', userSelect: 'none' }}>/{e.date.slice(5, 7)}</span>
                         </td>
                         <td className="editable-cell" onDoubleClick={() => editExpenseCat(e.id)}><span className={`cat-badge cat-${e.cat}`}>{e.cat}</span></td>
                         <td suppressContentEditableWarning contentEditable style={{ cursor: 'text' }}
