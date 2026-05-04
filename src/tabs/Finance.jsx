@@ -728,7 +728,7 @@ export default function Finance({ state, setState, user, isDemo }) {
               <div key={i.id} className="overview-row" style={{ gap: '8px', cursor: 'pointer' }} onClick={() => setIncomeModal({ ...i })}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '12px', fontWeight: 500 }}>{i.source}{i.salary ? ' (Salary)' : ''}</div>
-                  <div style={{ fontSize: '10px', color: 'var(--text3)' }}>{i.date}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text3)' }}>{i.date.slice(8)}-{i.date.slice(5, 7)}-{i.date.slice(0, 4)}</div>
                 </div>
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', color: 'var(--green)' }} onClick={ev => ev.stopPropagation()}>
                   <span style={{ pointerEvents: 'none', userSelect: 'none' }}>$</span>
