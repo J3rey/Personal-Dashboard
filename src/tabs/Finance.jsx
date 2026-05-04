@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Doughnut, Bar } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -29,6 +29,18 @@ function getCostClass(cost, allCosts) {
   if (range === 0) return 'cost-low'
   const pct = (cost - min) / range
   return pct >= 0.66 ? 'cost-high' : pct >= 0.33 ? 'cost-mid' : 'cost-low'
+}
+
+function sortRowsByDate(rows) {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const dateA = a.row.date || '9999-12-31'
+      const dateB = b.row.date || '9999-12-31'
+      if (dateA !== dateB) return dateA < dateB ? -1 : 1
+      return a.index - b.index
+    })
+    .map(({ row }) => row)
 }
 
 const centrePlugin = {
@@ -91,7 +103,9 @@ export default function Finance({ state, setState, user, isDemo }) {
       : parseInt(monthFilter)
     const isCurrentPeriod = y === today.getFullYear() && m === today.getMonth() + 1
     const d = isCurrentPeriod ? today.getDate() : 1
-    setNewDate(`${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+    const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    setNewDate(iso)
+    setIncDate(iso)
   }, [yearFilter, monthFilter])
 
   function toggleFilter(cat) {
@@ -231,7 +245,8 @@ export default function Finance({ state, setState, user, isDemo }) {
   function saveIncomeModal() {
     if (!incomeModal) return
     const parsedAmount = parseFloat(incomeModal.amount)
-    const updated = { ...incomeModal, amount: Number.isNaN(parsedAmount) ? incomeModal.amount : parsedAmount }
+    if (Number.isNaN(parsedAmount) || parsedAmount < 0) return
+    const updated = { ...incomeModal, amount: Math.round(parsedAmount * 100) / 100 }
     setState(prev => ({ ...prev, income: prev.income.map(i => i.id === updated.id ? updated : i) }))
     if (!isDemo) db.updateIncome(updated.id, updated).catch(console.error)
     setIncomeModal(null)
@@ -300,7 +315,7 @@ export default function Finance({ state, setState, user, isDemo }) {
       barLabels = activeMos.map(mo => MONTH_NAMES[mo - 1])
       barDataArr = activeMos.map(mo => monthData[mo])
     } else {
-      const now = new Date()
+      const now = new Date(yearFilter, selMo - 1, 1)
       const last6 = Array.from({ length: 6 }, (_, i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
         return { m: d.getMonth() + 1, y: d.getFullYear() }
@@ -521,10 +536,7 @@ export default function Finance({ state, setState, user, isDemo }) {
                                 ev.currentTarget.textContent = String(dayNum).padStart(2, '0')
                                 if (newDate !== e.date) setState(prev => {
                                   const exps = prev.expenses.map(x => x.id === e.id ? { ...x, date: newDate } : x)
-                                  const specials = exps.filter(x => x.isHeader || x.isEnd)
-                                  const regulars = exps.filter(x => !x.isHeader && !x.isEnd)
-                                  regulars.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
-                                  return { ...prev, expenses: [...regulars, ...specials] }
+                                  return { ...prev, expenses: sortRowsByDate(exps) }
                                 })
                                 if (newDate !== e.date && !isDemo) db.updateTransaction(e.id, { date: newDate }).catch(console.error)
                               } else {
