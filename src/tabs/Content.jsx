@@ -25,6 +25,22 @@ const uid = () => _nextId++
 
 const STATUSES = ['Idea', 'Scripted', 'Filmed', 'Edited', 'Posted']
 
+function sameId(a, b) {
+  return String(a) === String(b)
+}
+
+function resolvePillarId(pillars, value) {
+  return pillars.find(p => sameId(p.id, value))?.id ?? ''
+}
+
+function isOtherPillar(pillar) {
+  return pillar.name.trim().toLowerCase() === 'other'
+}
+
+function sortPillarsForFilters(pillars) {
+  return [...pillars].sort((a, b) => Number(isOtherPillar(a)) - Number(isOtherPillar(b)))
+}
+
 function AutoTextarea({ value, onBlur, placeholder }) {
   const ref = useRef(null)
 
@@ -69,7 +85,7 @@ function PillarPopover({ pillars, currentId, rect, onSelect, onClose }) {
     }}>
       {pillars.map(p => {
         const col = PILLAR_COLORS[p.colorIdx] || PILLAR_COLORS[0]
-        const isActive = p.id === currentId
+        const isActive = sameId(p.id, currentId)
         return (
           <button key={p.id} onClick={() => onSelect(p.id)} style={{
             background: isActive ? col.bg : 'transparent',
@@ -107,7 +123,7 @@ function ContentRow({
   const [ideaVal, setIdeaVal] = useState(c.idea)
   const [pillarPopover, setPillarPopover] = useState(null) // rect | null
   const ideaRef = useRef(null)
-  const p = pillars.find(x => x.id === c.pillarId)
+  const p = pillars.find(x => sameId(x.id, c.pillarId))
   const col = p ? PILLAR_COLORS[p.colorIdx] || PILLAR_COLORS[0] : { bg: 'var(--surface2)', text: 'var(--text2)' }
   const statusCls = `status-${c.status.toLowerCase()}`
   const {
@@ -241,8 +257,12 @@ export default function Content({ state, setState, user, isDemo }) {
   const newIdeaRef = useRef(null)
 
   useEffect(() => {
-    if (!newPillar && state.pillars.length > 0) setNewPillar(state.pillars[0].id)
-  }, [state.pillars])
+    if (state.pillars.length === 0) {
+      setNewPillar('')
+      return
+    }
+    if (!resolvePillarId(state.pillars, newPillar)) setNewPillar(state.pillars[0].id)
+  }, [state.pillars, newPillar])
 
   const [activeDragId, setActiveDragId] = useState(null)
   const [overDragId, setOverDragId] = useState(null)
@@ -278,12 +298,14 @@ export default function Content({ state, setState, user, isDemo }) {
 
   async function addContentRow() {
     if (!newIdea.trim()) return
-    const item = { idea: newIdea.trim(), pillarId: newPillar, status: newStatus, notes: newNotes }
+    const pillarId = resolvePillarId(state.pillars, newPillar)
+    if (!pillarId) return
+    const item = { idea: newIdea.trim(), pillarId, status: newStatus, notes: newNotes }
     if (isDemo) {
-      setState(prev => ({ ...prev, content: [...prev.content, { id: uid(), ...item }] }))
+      setState(prev => ({ ...prev, content: [...prev.content, { id: uid(), ...item }], contentFilter: pillarId }))
     } else {
       const id = await db.insertContentItem(user.id, item, state.content.length).catch(console.error)
-      if (id) setState(prev => ({ ...prev, content: [...prev.content, { id, ...item }] }))
+      if (id) setState(prev => ({ ...prev, content: [...prev.content, { id, ...item }], contentFilter: pillarId }))
     }
     setNewIdea('')
     setNewNotes('')
@@ -339,10 +361,15 @@ export default function Content({ state, setState, user, isDemo }) {
     if (!newPillarName.trim()) return
     const pillar = { name: newPillarName.trim(), colorIdx: selectedColor }
     if (isDemo) {
-      setState(prev => ({ ...prev, pillars: [...prev.pillars, { id: uid(), ...pillar }] }))
+      const id = uid()
+      setState(prev => ({ ...prev, pillars: [...prev.pillars, { id, ...pillar }], contentFilter: id }))
+      setNewPillar(id)
     } else {
       const id = await db.insertPillar(user.id, pillar, state.pillars.length).catch(console.error)
-      if (id) setState(prev => ({ ...prev, pillars: [...prev.pillars, { id, ...pillar }] }))
+      if (id) {
+        setState(prev => ({ ...prev, pillars: [...prev.pillars, { id, ...pillar }], contentFilter: id }))
+        setNewPillar(id)
+      }
     }
     setNewPillarName('')
   }
@@ -356,12 +383,17 @@ export default function Content({ state, setState, user, isDemo }) {
         return
       }
     }
-    setState(prev => ({ ...prev, pillars: prev.pillars.filter(p => p.id !== id) }))
+    setState(prev => {
+      const pillars = prev.pillars.filter(p => !sameId(p.id, id))
+      const contentFilter = sameId(prev.contentFilter, id) ? 'all' : prev.contentFilter
+      return { ...prev, pillars, contentFilter }
+    })
   }
 
   const f = state.contentFilter
-  const active = state.content.filter(c => c.status !== 'Posted' && (f === 'all' || c.pillarId === f))
-  const posted = state.content.filter(c => c.status === 'Posted' && (f === 'all' || c.pillarId === f))
+  const filterPillars = sortPillarsForFilters(state.pillars)
+  const active = state.content.filter(c => c.status !== 'Posted' && (f === 'all' || sameId(c.pillarId, f)))
+  const posted = state.content.filter(c => c.status === 'Posted' && (f === 'all' || sameId(c.pillarId, f)))
 
   return (
     <div className="panel">
@@ -376,12 +408,12 @@ export default function Content({ state, setState, user, isDemo }) {
           >
             All
           </button>
-          {state.pillars.map(p => {
+          {filterPillars.map(p => {
             const c = PILLAR_COLORS[p.colorIdx] || PILLAR_COLORS[0]
             return (
               <button
                 key={p.id}
-                className={'pillar-chip' + (f === p.id ? ' selected' : '')}
+                className={'pillar-chip' + (sameId(f, p.id) ? ' selected' : '')}
                 onClick={() => setFilter(p.id)}
                 style={{ background: c.bg, color: c.text }}
               >
@@ -507,7 +539,7 @@ export default function Content({ state, setState, user, isDemo }) {
                 />
               </td>
               <td>
-                <select className="form-select" value={newPillar} onChange={e => setNewPillar(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px' }}>
+                <select className="form-select" value={newPillar} onChange={e => setNewPillar(resolvePillarId(state.pillars, e.target.value))} style={{ fontSize: '12px', padding: '4px 8px' }}>
                   {state.pillars.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </td>
