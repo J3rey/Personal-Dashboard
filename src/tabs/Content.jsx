@@ -302,10 +302,10 @@ export default function Content({ state, setState, user, isDemo }) {
     if (!pillarId) return
     const item = { idea: newIdea.trim(), pillarId, status: newStatus, notes: newNotes }
     if (isDemo) {
-      setState(prev => ({ ...prev, content: [...prev.content, { id: uid(), ...item }], contentFilter: pillarId }))
+      setState(prev => ({ ...prev, content: [...prev.content, { id: uid(), ...item }] }))
     } else {
       const id = await db.insertContentItem(user.id, item, state.content.length).catch(console.error)
-      if (id) setState(prev => ({ ...prev, content: [...prev.content, { id, ...item }], contentFilter: pillarId }))
+      if (id) setState(prev => ({ ...prev, content: [...prev.content, { id, ...item }] }))
     }
     setNewIdea('')
     setNewNotes('')
@@ -362,12 +362,12 @@ export default function Content({ state, setState, user, isDemo }) {
     const pillar = { name: newPillarName.trim(), colorIdx: selectedColor }
     if (isDemo) {
       const id = uid()
-      setState(prev => ({ ...prev, pillars: [...prev.pillars, { id, ...pillar }], contentFilter: id }))
+      setState(prev => ({ ...prev, pillars: [...prev.pillars, { id, ...pillar }] }))
       setNewPillar(id)
     } else {
       const id = await db.insertPillar(user.id, pillar, state.pillars.length).catch(console.error)
       if (id) {
-        setState(prev => ({ ...prev, pillars: [...prev.pillars, { id, ...pillar }], contentFilter: id }))
+        setState(prev => ({ ...prev, pillars: [...prev.pillars, { id, ...pillar }] }))
         setNewPillar(id)
       }
     }
