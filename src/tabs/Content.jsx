@@ -33,6 +33,10 @@ function resolvePillarId(pillars, value) {
   return pillars.find(p => sameId(p.id, value))?.id ?? ''
 }
 
+function getDefaultPillarId(pillars) {
+  return pillars.find(p => p.name.trim().toLowerCase() === 'ditl')?.id ?? pillars[0]?.id ?? ''
+}
+
 function isOtherPillar(pillar) {
   return pillar.name.trim().toLowerCase() === 'other'
 }
@@ -250,7 +254,7 @@ export default function Content({ state, setState, user, isDemo }) {
 
   // Add content form
   const [newIdea, setNewIdea]     = useState('')
-  const [newPillar, setNewPillar] = useState(state.pillars[0]?.id ?? '')
+  const [newPillar, setNewPillar] = useState(() => getDefaultPillarId(state.pillars))
   const [newStatus, setNewStatus] = useState('Idea')
   const [newNotes, setNewNotes]   = useState('')
   const newNotesRef = useRef(null)
@@ -261,7 +265,7 @@ export default function Content({ state, setState, user, isDemo }) {
       setNewPillar('')
       return
     }
-    if (!resolvePillarId(state.pillars, newPillar)) setNewPillar(state.pillars[0].id)
+    if (!resolvePillarId(state.pillars, newPillar)) setNewPillar(getDefaultPillarId(state.pillars))
   }, [state.pillars, newPillar])
 
   const [activeDragId, setActiveDragId] = useState(null)
@@ -308,6 +312,8 @@ export default function Content({ state, setState, user, isDemo }) {
       if (id) setState(prev => ({ ...prev, content: [...prev.content, { id, ...item }] }))
     }
     setNewIdea('')
+    setNewPillar(getDefaultPillarId(state.pillars))
+    setNewStatus('Idea')
     setNewNotes('')
     if (newIdeaRef.current) { newIdeaRef.current.style.height = 'auto'; newIdeaRef.current.focus() }
     if (newNotesRef.current) newNotesRef.current.style.height = 'auto'
