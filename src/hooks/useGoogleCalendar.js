@@ -6,6 +6,7 @@ const TOKEN_KEY    = 'gcal_token'       // expires after 55 min
 const EXPIRES_KEY  = 'gcal_expires'
 const TOKEN_REFRESH_MARGIN_MS = 60 * 1000
 const SILENT_RECONNECT_TIMEOUT_MS = 4000
+const GOOGLE_CONFIG_ERROR = 'Google Calendar is not configured for this deployment.'
 
 function stripHtml(html) {
   const div = document.createElement('div')
@@ -69,13 +70,13 @@ export function useGoogleCalendar() {
   const [events, setEvents]       = useState([])
   const [calendars, setCalendars] = useState([])
   const [loading, setLoading]     = useState(false)
+  const [authError, setAuthError] = useState('')
   const [authStatus, setAuthStatus] = useState(() => {
     if (readStoredToken()) return 'connected'
     if (wantsStoredConnection()) return 'reconnecting'
     return 'disconnected'
   })
   const clientRef                 = useRef(null)
-  const pendingInteractiveRef      = useRef(false)
   const reconnectTimerRef          = useRef(null)
 
   // Fetch calendar data whenever we have a valid token
@@ -90,20 +91,35 @@ export function useGoogleCalendar() {
   // Init GIS token client
   useEffect(() => {
     function init() {
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+      if (!clientId) {
+        clearReconnectTimer()
+        setAuthError(GOOGLE_CONFIG_ERROR)
+        setAuthStatus('needsInteraction')
+        return
+      }
+
       const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        client_id: clientId,
         scope: SCOPE,
+        error_callback: (err) => {
+          clearReconnectTimer()
+          console.warn('GCal popup error', err)
+          setAuthError('Google sign-in could not open. Allow pop-ups for this site, then try again.')
+          setAuthStatus(wantsStoredConnection() ? 'needsInteraction' : 'disconnected')
+        },
         callback: (resp) => {
           clearReconnectTimer()
-          pendingInteractiveRef.current = false
           if (resp.error || !resp.access_token) {
             console.warn('GCal auth error', resp.error || resp)
             clearStoredToken({ keepConnectionPreference: wantsStoredConnection() })
             resetCalendarState()
+            setAuthError('Google Calendar needs you to sign in again.')
             setAuthStatus(wantsStoredConnection() ? 'needsInteraction' : 'disconnected')
             return
           }
           storeToken(resp)
+          setAuthError('')
           setAuthStatus('connected')
           setAccessToken(resp.access_token)
         },
@@ -113,10 +129,9 @@ export function useGoogleCalendar() {
       const storedToken = readStoredToken()
       if (storedToken) {
         clearReconnectTimer()
+        setAuthError('')
         setAccessToken(storedToken)
         setAuthStatus('connected')
-      } else if (pendingInteractiveRef.current) {
-        requestInteractiveToken()
       } else if (wantsStoredConnection()) {
         requestSilentReconnect()
       }
@@ -245,6 +260,7 @@ export function useGoogleCalendar() {
       reconnectTimerRef.current = null
       if (readStoredToken()) return
       resetCalendarState()
+      setAuthError('Google Calendar needs you to sign in again.')
       setAuthStatus(wantsStoredConnection() ? 'needsInteraction' : 'disconnected')
     }, SILENT_RECONNECT_TIMEOUT_MS)
   }
@@ -261,8 +277,15 @@ export function useGoogleCalendar() {
 
   function requestInteractiveToken() {
     clearReconnectTimer()
+    setAuthError('')
     setAuthStatus('reconnecting')
-    clientRef.current.requestAccessToken({ prompt: 'select_account consent' })
+    try {
+      clientRef.current.requestAccessToken({ prompt: 'select_account consent' })
+    } catch (err) {
+      console.warn('GCal interactive auth failed', err)
+      setAuthError('Google sign-in could not open. Allow pop-ups for this site, then try again.')
+      setAuthStatus('needsInteraction')
+    }
   }
 
   function handleExpiredToken() {
@@ -276,10 +299,16 @@ export function useGoogleCalendar() {
     clearStoredToken({ keepConnectionPreference: true })
     resetCalendarState()
 
+    if (!import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+      setAuthError(GOOGLE_CONFIG_ERROR)
+      setAuthStatus('needsInteraction')
+      return
+    }
+
     if (clientRef.current) {
       requestInteractiveToken()
     } else {
-      pendingInteractiveRef.current = true
+      setAuthError('Google sign-in is still loading. Try again in a moment.')
       setAuthStatus('needsInteraction')
     }
   }
@@ -289,6 +318,7 @@ export function useGoogleCalendar() {
     if (accessToken) window.google?.accounts.oauth2.revoke(accessToken, () => {})
     clearStoredToken()
     resetCalendarState()
+    setAuthError('')
     setAuthStatus('disconnected')
   }
 
@@ -298,6 +328,7 @@ export function useGoogleCalendar() {
     calendars,
     loading,
     authStatus,
+    authError,
     reconnectNeeded: authStatus === 'needsInteraction',
     connect,
     disconnect,

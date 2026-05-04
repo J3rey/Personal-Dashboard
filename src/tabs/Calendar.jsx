@@ -578,6 +578,7 @@ export default function Calendar() {
     calendars,
     loading: gcalLoading,
     authStatus,
+    authError,
     reconnectNeeded,
     connect,
     disconnect,
@@ -675,6 +676,9 @@ export default function Calendar() {
                 <button className="btn-ghost" style={{ fontSize: '11px', padding: '2px 8px' }} onClick={connect}>
                   {authButtonLabel}
                 </button>
+                {authError && (
+                  <span style={{ fontSize: '11px', color: '#b45309', width: '100%' }}>{authError}</span>
+                )}
               </>
             )}
           </span>
