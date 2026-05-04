@@ -12,6 +12,20 @@ function stripHtml(html) {
   return (div.textContent || div.innerText || '').trim()
 }
 
+function toDs(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function expandAllDayDates(startDate, endDate) {
+  const start = new Date(startDate + 'T12:00:00')
+  const end = new Date((endDate || startDate) + 'T12:00:00')
+  const dates = []
+  for (const d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+    dates.push(toDs(d))
+  }
+  return dates.length ? dates : [startDate]
+}
+
 const ONE_MONTH_AGO   = () => new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString()
 const THREE_MONTHS_FW = () => new Date(new Date().getFullYear(), new Date().getMonth() + 3, 1).toISOString()
 
@@ -136,18 +150,34 @@ export function useGoogleCalendar() {
         const evRes  = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
         const evData = await evRes.json()
         ;(evData.items ?? []).forEach(ev => {
-          allEvents.push({
-            id:            ev.id,
+          const base = {
             title:         ev.summary ?? '(no title)',
-            date:          (ev.start.date || ev.start.dateTime || '').slice(0, 10),
-            start:         ev.start.dateTime ? ev.start.dateTime.slice(11, 16) : '',
-            end:           ev.end?.dateTime  ? ev.end.dateTime.slice(11, 16)  : '',
-            isAllDay:      !!ev.start.date,
             isTask:        false,
             cat:           cal.id,
             calendarName:  cal.summary,
             calendarColor: cal.backgroundColor ?? '#4a7c59',
             notes:         ev.description ? stripHtml(ev.description) : '',
+          }
+          if (ev.start?.date) {
+            expandAllDayDates(ev.start.date, ev.end?.date).forEach(date => {
+              allEvents.push({
+                ...base,
+                id:       `${ev.id}_${date}`,
+                date,
+                start:    '',
+                end:      '',
+                isAllDay: true,
+              })
+            })
+            return
+          }
+          allEvents.push({
+            ...base,
+            id:       ev.id,
+            date:     (ev.start?.dateTime || '').slice(0, 10),
+            start:    ev.start?.dateTime ? ev.start.dateTime.slice(11, 16) : '',
+            end:      ev.end?.dateTime  ? ev.end.dateTime.slice(11, 16)  : '',
+            isAllDay: false,
           })
         })
       }))
@@ -160,7 +190,7 @@ export function useGoogleCalendar() {
       const listsData = await listsRes.json()
       const taskLists = listsData.error ? [] : (listsData.items ?? [])
 
-      const today = new Date().toISOString().split('T')[0]
+      const today = toDs(new Date())
       await Promise.all(taskLists.map(async (list) => {
         const url = `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(list.id)}/tasks` +
           `?showCompleted=false&maxResults=100`

@@ -4,13 +4,17 @@ import * as db from '../services/db.js'
 let _nextId = 400
 const uid = () => _nextId++
 
+function toDs(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function getWeekDates(offset) {
   const now = new Date(), day = now.getDay(), mon = new Date(now)
   mon.setDate(now.getDate() - ((day + 6) % 7) + offset * 7)
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(mon)
     d.setDate(mon.getDate() + i)
-    return d.toISOString().split('T')[0]
+    return toDs(d)
   })
 }
 
@@ -44,9 +48,16 @@ export default function Habits({ state, setState, user, isDemo }) {
     if (!isDemo) db.toggleHabitLog(user.id, habitId, date, newChecked).catch(console.error)
   }
 
-  function deleteHabit(id) {
+  async function deleteHabit(id) {
+    if (!isDemo) {
+      try {
+        await db.deleteHabit(id)
+      } catch (err) {
+        console.error(err)
+        return
+      }
+    }
     setState(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }))
-    if (!isDemo) db.deleteHabit(id).catch(console.error)
   }
 
   async function addHabit() {

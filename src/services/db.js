@@ -1,11 +1,15 @@
 import { supabase } from '../lib/supabase.js'
 
+function toDs(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function dateFromWeekStartAndDay(weekStart, dayIndex) {
   const d = new Date(weekStart + 'T12:00:00')
   d.setDate(d.getDate() + dayIndex)
-  return d.toISOString().split('T')[0]
+  return toDs(d)
 }
 
 function weekStartAndDayFromDate(dateStr) {
@@ -13,42 +17,10 @@ function weekStartAndDayFromDate(dateStr) {
   const dayIndex = (d.getDay() + 6) % 7
   const mon = new Date(d)
   mon.setDate(d.getDate() - dayIndex)
-  return { weekStart: mon.toISOString().split('T')[0], dayIndex }
+  return { weekStart: toDs(mon), dayIndex }
 }
 
 // ── Calendar ──────────────────────────────────────────────────────────────────
-
-export async function fetchEvents(userId) {
-  const { data, error } = await supabase
-    .from('calendar_events')
-    .select('*')
-    .eq('user_id', userId)
-    .order('date')
-  if (error) throw error
-  return (data ?? []).map(e => ({
-    id: e.id, title: e.title, date: e.date,
-    start: e.start ?? '', end: e.end ?? '',
-    cat: e.cat, notes: e.notes ?? '',
-  }))
-}
-
-export async function insertEvent(userId, event) {
-  const { data, error } = await supabase
-    .from('calendar_events')
-    .insert({
-      user_id: userId, title: event.title, date: event.date,
-      start: event.start || null, end: event.end || null,
-      cat: event.cat, notes: event.notes,
-    })
-    .select().single()
-  if (error) throw error
-  return { ...event, id: data.id }
-}
-
-export async function deleteEvent(id) {
-  const { error } = await supabase.from('calendar_events').delete().eq('id', id)
-  if (error) throw error
-}
 
 // ── Finance: transactions ─────────────────────────────────────────────────────
 

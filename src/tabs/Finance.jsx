@@ -160,10 +160,11 @@ export default function Finance({ state, setState, user, isDemo }) {
   const net = totalInc - totalExp
 
   async function addExpense() {
-    if (!newDetail.trim() || isNaN(parseFloat(newCost))) return
+    const cost = parseFloat(newCost)
+    if (!newDetail.trim() || Number.isNaN(cost) || cost < 0) return
     const expData = {
       date: newDate, cat: newCat,
-      detail: newDetail.trim(), cost: parseFloat(newCost),
+      detail: newDetail.trim(), cost: Math.round(cost * 100) / 100,
       type: newType, person: newPerson.trim(),
     }
     let id
@@ -219,15 +220,22 @@ export default function Finance({ state, setState, user, isDemo }) {
     setState(prev => ({ ...prev, expenses: [...prev.expenses, { id, ...end }] }))
   }
 
-  function deleteExpense(id) {
+  async function deleteExpense(id) {
     const target = state.expenses.find(e => e.id === id)
     const toDelete = new Set([id])
     if (target?.isHeader) {
       const end = state.expenses.find(e => e.isEnd && e.headerId === id)
       if (end) toDelete.add(end.id)
     }
+    if (!isDemo) {
+      try {
+        await Promise.all([...toDelete].map(did => db.deleteTransaction(did)))
+      } catch (err) {
+        console.error(err)
+        return
+      }
+    }
     setState(prev => ({ ...prev, expenses: prev.expenses.filter(e => !toDelete.has(e.id)) }))
-    if (!isDemo) toDelete.forEach(did => db.deleteTransaction(did).catch(console.error))
   }
 
   function editExpenseCat(id) {
@@ -247,15 +255,20 @@ export default function Finance({ state, setState, user, isDemo }) {
     const parsedAmount = parseFloat(incomeModal.amount)
     if (Number.isNaN(parsedAmount) || parsedAmount < 0) return
     const updated = { ...incomeModal, amount: Math.round(parsedAmount * 100) / 100 }
-    setState(prev => ({ ...prev, income: prev.income.map(i => i.id === updated.id ? updated : i) }))
+    setState(prev => ({
+      ...prev,
+      income: prev.income
+        .map(i => i.id === updated.id ? updated : i)
+        .sort((a, b) => a.date === b.date ? String(a.source).localeCompare(String(b.source)) : a.date < b.date ? -1 : 1),
+    }))
     if (!isDemo) db.updateIncome(updated.id, updated).catch(console.error)
     setIncomeModal(null)
   }
 
   async function addIncome() {
     const amount = parseFloat(incAmount)
-    if (!incSource.trim() || isNaN(amount)) return
-    const incData = { date: incDate, source: incSource.trim(), amount, salary: incSalary }
+    if (!incSource.trim() || Number.isNaN(amount) || amount < 0) return
+    const incData = { date: incDate, source: incSource.trim(), amount: Math.round(amount * 100) / 100, salary: incSalary }
     let id
     if (isDemo) {
       id = uid()
@@ -263,13 +276,26 @@ export default function Finance({ state, setState, user, isDemo }) {
       id = await db.insertIncome(user.id, incData).catch(console.error)
       if (!id) return
     }
-    setState(prev => ({ ...prev, income: [...prev.income, { id, ...incData }] }))
+    const entry = { id, ...incData }
+    setState(prev => ({
+      ...prev,
+      income: [...prev.income, entry].sort((a, b) =>
+        a.date === b.date ? String(a.source).localeCompare(String(b.source)) : a.date < b.date ? -1 : 1
+      ),
+    }))
     setIncAmount(''); setIncSource(''); setIncSalary(false)
   }
 
-  function deleteIncome(id) {
+  async function deleteIncome(id) {
+    if (!isDemo) {
+      try {
+        await db.deleteIncome(id)
+      } catch (err) {
+        console.error(err)
+        return
+      }
+    }
     setState(prev => ({ ...prev, income: prev.income.filter(i => i.id !== id) }))
-    if (!isDemo) db.deleteIncome(id).catch(console.error)
   }
 
   function convertCurrency() {

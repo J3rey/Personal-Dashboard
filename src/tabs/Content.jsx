@@ -200,9 +200,16 @@ export default function Content({ state, setState, user, isDemo }) {
     if (!isDemo) db.updateContentItem(id, { [field]: val }).catch(console.error)
   }
 
-  function deleteContent(id) {
+  async function deleteContent(id) {
+    if (!isDemo) {
+      try {
+        await db.deleteContentItem(id)
+      } catch (err) {
+        console.error(err)
+        return
+      }
+    }
     setState(prev => ({ ...prev, content: prev.content.filter(c => c.id !== id) }))
-    if (!isDemo) db.deleteContentItem(id).catch(console.error)
   }
 
   async function addContentRow() {
@@ -276,9 +283,16 @@ export default function Content({ state, setState, user, isDemo }) {
     setNewPillarName('')
   }
 
-  function deletePillar(id) {
+  async function deletePillar(id) {
+    if (!isDemo) {
+      try {
+        await db.deletePillar(id)
+      } catch (err) {
+        console.error(err)
+        return
+      }
+    }
     setState(prev => ({ ...prev, pillars: prev.pillars.filter(p => p.id !== id) }))
-    if (!isDemo) db.deletePillar(id).catch(console.error)
   }
 
   const f = state.contentFilter

@@ -1,12 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar.js'
 
-const CAT_DOT = { google: 'var(--blue)', personal: 'var(--green)', work: 'var(--purple)' }
-const CATS_LIST = [
-  { value: 'personal', label: 'Personal', color: 'var(--green)',  bg: 'var(--green-light)'  },
-  { value: 'work',     label: 'Work',     color: 'var(--purple)', bg: 'var(--purple-light)' },
-  { value: 'google',   label: 'Study',    color: 'var(--blue)',   bg: 'var(--blue-light)'   },
-]
 const HIDDEN_CALENDARS_KEY = 'dashboard.hiddenCalendars'
 
 function readHiddenCalendars() {
@@ -70,12 +64,6 @@ const HOURS   = Array.from({ length: END_H - START_H }, (_, i) => i + START_H)
 
 function toDs(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function formatDateLabel(ds) {
-  return new Date(ds + 'T12:00:00').toLocaleDateString('en-AU', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  })
 }
 
 function hLabel(h) {
@@ -173,13 +161,11 @@ function eventColumnStyle(layoutInfo) {
 }
 
 // ── Event detail popover ───────────────────────────────────────────────────────
-function EventPopup({ event, x, y, onClose, onDelete }) {
+function EventPopup({ event, x, y, onClose }) {
   const ref = useRef(null)
-  const cat       = CATS_LIST.find(c => c.value === event.cat)
-  const evColor   = event.calendarColor || cat?.color || 'var(--accent)'
-  const evBg      = event.calendarColor ? event.calendarColor + '22' : cat?.bg || 'var(--surface2)'
-  const evLabel   = event.calendarName  || cat?.label || event.cat
-  const isGcal    = !!event.calendarColor
+  const evColor   = event.calendarColor || '#4a7c59'
+  const evBg      = evColor + '22'
+  const evLabel   = event.calendarName || event.cat
 
   useEffect(() => {
     function onMouse(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
@@ -249,15 +235,9 @@ function EventPopup({ event, x, y, onClose, onDelete }) {
           </span>
         </div>
 
-        {/* Actions */}
+        {/* Source */}
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
-          {isGcal && <span style={{ fontSize: '11px', color: 'var(--text3)', alignSelf: 'center', marginRight: 'auto' }}>Google Calendar</span>}
-          <button
-            onClick={() => !isGcal && onDelete(event.id)}
-            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '5px 12px', cursor: isGcal ? 'default' : 'pointer', fontSize: '12px', color: isGcal ? 'var(--text3)' : 'var(--red)', transition: 'all 0.1s', opacity: isGcal ? 0.4 : 1 }}
-            onMouseEnter={e => { if (!isGcal) { e.currentTarget.style.background = '#fff0f0'; e.currentTarget.style.borderColor = 'var(--red)' } }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = 'var(--border)' }}
-          >Delete</button>
+          <span style={{ fontSize: '11px', color: 'var(--text3)', alignSelf: 'center', marginRight: 'auto' }}>Google Calendar</span>
         </div>
       </div>
     </div>
@@ -265,32 +245,8 @@ function EventPopup({ event, x, y, onClose, onDelete }) {
 }
 
 // ── Create-event modal ─────────────────────────────────────────────────────────
-function CreateEventModal({ date, onClose, onSave }) {
-  const [title, setTitle]     = useState('')
-  const [allDay, setAllDay]   = useState(false)
-  const [start, setStart]     = useState('09:00')
-  const [end, setEnd]         = useState('10:00')
-  const [cat, setCat]         = useState('personal')
-  const [notes, setNotes]     = useState('')
-  const [shaking, setShaking] = useState(false)
-  const titleRef = useRef(null)
-
-  useEffect(() => {
-    titleRef.current?.focus()
-    function onKey(e) { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
-
-  function handleSave() {
-    if (!title.trim()) {
-      setShaking(true); setTimeout(() => setShaking(false), 350)
-      titleRef.current?.focus(); return
-    }
-    onSave({ title: title.trim(), date, start: allDay ? '' : start, end: allDay ? '' : end, cat, notes })
-  }
-
-  const selectedCat = CATS_LIST.find(c => c.value === cat)
+function CreateEventModal() {
+  return null
 
   return (
     <div
@@ -301,7 +257,7 @@ function CreateEventModal({ date, onClose, onSave }) {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '22px' }}>
           <div>
             <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.3px' }}>New Event</div>
-            <div style={{ fontSize: '12px', color: 'var(--text3)', marginTop: '3px' }}>{formatDateLabel(date)}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text3)', marginTop: '3px' }}>{date}</div>
           </div>
           <button onClick={onClose} style={{ background: 'var(--surface2)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer', fontSize: '15px', color: 'var(--text2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
@@ -329,7 +285,7 @@ function CreateEventModal({ date, onClose, onSave }) {
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Category</div>
           <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
-            {CATS_LIST.map(c => {
+            {[].map(c => {
               const active = cat === c.value
               return (
                 <button key={c.value} onClick={() => setCat(c.value)} style={{ padding: '6px 14px', borderRadius: '20px', border: `1.5px solid ${active ? c.color : 'var(--border)'}`, background: active ? c.bg : 'transparent', color: active ? c.color : 'var(--text2)', fontSize: '12px', fontWeight: active ? 600 : 400, cursor: 'pointer', transition: 'all 0.12s', display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -615,7 +571,7 @@ function DayView({ calViewDate, events, onSelectDay, onSelectEvent }) {
 }
 
 // ── Main Calendar ──────────────────────────────────────────────────────────────
-export default function Calendar({ state, setState }) {
+export default function Calendar() {
   const {
     isConnected,
     events: gcalEvents,
@@ -644,7 +600,7 @@ export default function Calendar({ state, setState }) {
     })
   }
 
-  const allEvents = (isConnected ? [...state.events, ...gcalEvents] : state.events).filter(e => !hiddenCals.has(e.cat))
+  const allEvents = (isConnected ? gcalEvents : []).filter(e => !hiddenCals.has(e.cat))
 
   function calNav(dir) {
     setCalViewDate(prev => {
@@ -659,16 +615,11 @@ export default function Calendar({ state, setState }) {
     setEventPopup(null)
   }
 
-function handleSelectEvent(mouseEvt, event) {
-  const popupEvent = event.start
-    ? { ...event, start: formatTime12(event.start), end: event.end ? formatTime12(event.end) : '' }
-    : event
-  setEventPopup({ event: popupEvent, x: mouseEvt.clientX, y: mouseEvt.clientY })
-}
-
-  function deleteEvent(id) {
-    setState(prev => ({ ...prev, events: prev.events.filter(e => e.id !== id) }))
-    setEventPopup(null)
+  function handleSelectEvent(mouseEvt, event) {
+    const popupEvent = event.start
+      ? { ...event, start: formatTime12(event.start), end: event.end ? formatTime12(event.end) : '' }
+      : event
+    setEventPopup({ event: popupEvent, x: mouseEvt.clientX, y: mouseEvt.clientY })
   }
 
   function getCalLabel() {
@@ -741,7 +692,7 @@ function handleSelectEvent(mouseEvt, event) {
               const label = new Date(e.date + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' })
               return (
                 <div key={e.id} className="event-item" style={{ cursor: 'pointer' }} onClick={ev => handleSelectEvent(ev, e)}>
-                  <div className="event-dot" style={{ background: e.calendarColor || CAT_DOT[e.cat] || 'var(--accent)' }} />
+                  <div className="event-dot" style={{ background: e.calendarColor || 'var(--accent)' }} />
                   <div className="event-time">{formatTime12(e.start)}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="event-title"><EventLabel event={e} /></div>
@@ -781,7 +732,6 @@ function handleSelectEvent(mouseEvt, event) {
           x={eventPopup.x}
           y={eventPopup.y}
           onClose={() => setEventPopup(null)}
-          onDelete={deleteEvent}
         />
       )}
     </div>

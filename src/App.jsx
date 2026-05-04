@@ -40,7 +40,7 @@ export default function App() {
       ) : null}
       {user && dataError ? null : (
         <>
-          {activeTab === 'calendar' && <Calendar state={state} setState={setState} />}
+          {activeTab === 'calendar' && <Calendar />}
           {activeTab === 'finance'  && <Finance  state={state} setState={setState} user={user} isDemo={isDemo} />}
           {activeTab === 'habits'   && <Habits   state={state} setState={setState} user={user} isDemo={isDemo} />}
           {activeTab === 'content'  && <Content  state={state} setState={setState} user={user} isDemo={isDemo} />}
