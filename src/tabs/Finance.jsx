@@ -447,6 +447,15 @@ export default function Finance({ state, setState, user, isDemo }) {
                 ))}
               </div>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                {(() => {
+                  const now = new Date()
+                  const isThisMonth = monthFilter === String(now.getMonth() + 1) && yearFilter === now.getFullYear()
+                  return !isThisMonth && (
+                    <button className="btn-ghost" onClick={() => { setMonthFilter(String(now.getMonth() + 1)); setYearFilter(now.getFullYear()) }} style={{ fontSize: '11px', padding: '3px 8px', color: 'var(--accent)', fontWeight: 600 }}>
+                      Today
+                    </button>
+                  )
+                })()}
                 <select className="form-select" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px' }}>
                   <option value="all">All Year</option>
                   {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
