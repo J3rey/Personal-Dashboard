@@ -241,7 +241,7 @@ export default function Finance({ state, setState, user, isDemo }) {
       id = await db.insertTransaction(user.id, header, state.expenses.length).catch(console.error)
       if (!id) return
     }
-    setState(prev => ({ ...prev, expenses: [...prev.expenses, { id, ...header }] }))
+    setState(prev => ({ ...prev, expenses: sortRowsByDate([...prev.expenses, { id, ...header }]) }))
     setNewHeader('')
   }
 
@@ -257,7 +257,7 @@ export default function Finance({ state, setState, user, isDemo }) {
       id = await db.insertTransaction(user.id, end, state.expenses.length).catch(console.error)
       if (!id) return
     }
-    setState(prev => ({ ...prev, expenses: [...prev.expenses, { id, ...end }] }))
+    setState(prev => ({ ...prev, expenses: sortRowsByDate([...prev.expenses, { id, ...end }]) }))
   }
 
   async function deleteExpense(id) {
