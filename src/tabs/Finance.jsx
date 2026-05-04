@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Doughnut, Bar } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -60,6 +61,45 @@ const centrePlugin = {
     ctx.fillText('$' + total.toFixed(0), cx, cy + 8)
     ctx.restore()
   },
+}
+
+function CatPopover({ cat, rect, onSelect, onClose }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [onClose])
+  return createPortal(
+    <div ref={ref} style={{
+      position: 'fixed', zIndex: 1000,
+      top: rect.bottom + 4, left: rect.left,
+      background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '6px',
+      display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '120px',
+    }}>
+      {CATS.map(c => {
+        const isActive = c === cat
+        const bg = CAT_COLORS[c] + '33'
+        const color = CAT_COLORS[c]
+        return (
+          <button key={c} onClick={() => onSelect(c)} style={{
+            background: isActive ? bg : 'transparent',
+            color: isActive ? color : 'var(--text1)',
+            border: isActive ? `1px solid ${color}55` : '1px solid transparent',
+            borderRadius: '5px', padding: '5px 10px', fontSize: '12px',
+            fontWeight: isActive ? 600 : 400, cursor: 'pointer', textAlign: 'left',
+          }}
+            onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = bg; e.currentTarget.style.color = color } }}
+            onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text1)' } }}
+          >
+            {c}
+          </button>
+        )
+      })}
+    </div>,
+    document.body
+  )
 }
 
 export default function Finance({ state, setState, user, isDemo }) {
@@ -238,16 +278,12 @@ export default function Finance({ state, setState, user, isDemo }) {
     setState(prev => ({ ...prev, expenses: prev.expenses.filter(e => !toDelete.has(e.id)) }))
   }
 
-  function editExpenseCat(id) {
-    const exps = [...state.expenses]
-    const e = exps.find(x => x.id === id)
-    if (!e) return
-    const v = prompt('Edit category (Food/Transport/Misc/Recurring/Events/Clothes/Gifts):', e.cat)
-    if (v && CATS.includes(v)) {
-      e.cat = v
-      setState(prev => ({ ...prev, expenses: exps }))
-      if (!isDemo) db.updateTransaction(id, { cat: v }).catch(console.error)
-    }
+  const [catPopover, setCatPopover] = useState(null) // { id, rect }
+
+  function updateExpenseCat(id, cat) {
+    setState(prev => ({ ...prev, expenses: prev.expenses.map(x => x.id === id ? { ...x, cat } : x) }))
+    if (!isDemo) db.updateTransaction(id, { cat }).catch(console.error)
+    setCatPopover(null)
   }
 
   function saveIncomeModal() {
@@ -572,7 +608,11 @@ export default function Finance({ state, setState, user, isDemo }) {
                           >{e.date.slice(8)}</span>
                           <span style={{ pointerEvents: 'none', userSelect: 'none' }}>/{e.date.slice(5, 7)}</span>
                         </td>
-                        <td className="editable-cell" onDoubleClick={() => editExpenseCat(e.id)}><span className={`cat-badge cat-${e.cat}`}>{e.cat}</span></td>
+                        <td>
+                          <button onClick={ev => { const r = ev.currentTarget.getBoundingClientRect(); setCatPopover(p => p?.id === e.id ? null : { id: e.id, rect: r }) }} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                            <span className={`cat-badge cat-${e.cat}`}>{e.cat}</span>
+                          </button>
+                        </td>
                         <td suppressContentEditableWarning contentEditable style={{ cursor: 'text' }}
                           onBlur={ev => {
                             const v = ev.currentTarget.textContent
@@ -883,6 +923,14 @@ export default function Finance({ state, setState, user, isDemo }) {
             </div>
           </div>
         </div>
+      )}
+      {catPopover && (
+        <CatPopover
+          cat={state.expenses.find(e => e.id === catPopover.id)?.cat}
+          rect={catPopover.rect}
+          onSelect={cat => updateExpenseCat(catPopover.id, cat)}
+          onClose={() => setCatPopover(null)}
+        />
       )}
     </div>
   )

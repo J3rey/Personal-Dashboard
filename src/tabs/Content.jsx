@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext,
   KeyboardSensor,
@@ -51,11 +52,50 @@ function AutoTextarea({ value, onBlur, placeholder }) {
   )
 }
 
+function PillarPopover({ pillars, currentId, rect, onSelect, onClose }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [onClose])
+  return createPortal(
+    <div ref={ref} style={{
+      position: 'fixed', zIndex: 1000,
+      top: rect.bottom + 4, left: rect.left,
+      background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '6px', display: 'flex',
+      flexDirection: 'column', gap: '3px', minWidth: '140px',
+    }}>
+      {pillars.map(p => {
+        const col = PILLAR_COLORS[p.colorIdx] || PILLAR_COLORS[0]
+        const isActive = p.id === currentId
+        return (
+          <button key={p.id} onClick={() => onSelect(p.id)} style={{
+            background: isActive ? col.bg : 'transparent',
+            color: isActive ? col.text : 'var(--text1)',
+            border: isActive ? `1px solid ${col.text}33` : '1px solid transparent',
+            borderRadius: '5px', padding: '5px 10px', fontSize: '12px', fontWeight: isActive ? 600 : 400,
+            cursor: 'pointer', textAlign: 'left', transition: 'background 0.1s',
+          }}
+            onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = col.bg; e.currentTarget.style.color = col.text } }}
+            onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text1)' } }}
+          >
+            {p.name}
+          </button>
+        )
+      })}
+    </div>,
+    document.body
+  )
+}
+
 function ContentRow({
   c,
   pillars,
   onStatusChange,
   onNoteChange,
+  onPillarChange,
   onDelete,
   allowDrag,
   activeDragId,
@@ -65,6 +105,7 @@ function ContentRow({
 }) {
   const [editingIdea, setEditingIdea] = useState(false)
   const [ideaVal, setIdeaVal] = useState(c.idea)
+  const [pillarPopover, setPillarPopover] = useState(null) // rect | null
   const ideaRef = useRef(null)
   const p = pillars.find(x => x.id === c.pillarId)
   const col = p ? PILLAR_COLORS[p.colorIdx] || PILLAR_COLORS[0] : { bg: 'var(--surface2)', text: 'var(--text2)' }
@@ -146,7 +187,25 @@ function ContentRow({
         )}
       </td>
       <td>
-        {p ? <span style={{ background: col.bg, color: col.text, padding: '2px 7px', borderRadius: '4px', fontSize: '11px', fontWeight: 500 }}>{p.name}</span> : '—'}
+        <button
+          onClick={ev => { const r = ev.currentTarget.getBoundingClientRect(); setPillarPopover(p => p ? null : r) }}
+          title="Change pillar"
+          style={{
+            background: col.bg, color: col.text, padding: '2px 7px', borderRadius: '4px',
+            fontSize: '11px', fontWeight: 500, border: 'none', cursor: 'pointer',
+          }}
+        >
+          {p ? p.name : '—'}
+        </button>
+        {pillarPopover && (
+          <PillarPopover
+            pillars={pillars}
+            currentId={c.pillarId}
+            rect={pillarPopover}
+            onSelect={id => { onPillarChange(c.id, id); setPillarPopover(null) }}
+            onClose={() => setPillarPopover(null)}
+          />
+        )}
       </td>
       <td>
         <select className={`${statusCls} status-select`} value={c.status} onChange={e => onStatusChange(c.id, 'status', e.target.value)}>
@@ -165,6 +224,7 @@ function SortableContentRow(props) {
   const sortable = useSortable({ id: props.c.id })
   return <ContentRow {...props} sortable={sortable} />
 }
+
 
 export default function Content({ state, setState, user, isDemo }) {
   const [postedCollapsed, setPostedCollapsed] = useState(true)
@@ -370,6 +430,7 @@ export default function Content({ state, setState, user, isDemo }) {
                     pillars={state.pillars}
                     onStatusChange={updateContent}
                     onNoteChange={(id, val) => updateContent(id, 'notes', val)}
+                    onPillarChange={(id, pillarId) => updateContent(id, 'pillarId', pillarId)}
                     onDelete={deleteContent}
                     allowDrag
                     activeDragId={activeDragId}
@@ -393,7 +454,7 @@ export default function Content({ state, setState, user, isDemo }) {
           </div>
         )}
         {!postedCollapsed && posted.length > 0 && (
-          <table style={{ tableLayout: 'fixed', opacity: 0.45 }}>
+          <table style={{ tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '220px' }} />
               <col style={{ width: '150px' }} />
@@ -405,17 +466,18 @@ export default function Content({ state, setState, user, isDemo }) {
               {posted.map(c => (
                   <ContentRow
                     key={c.id}
-                  c={c}
-                  pillars={state.pillars}
-                  onStatusChange={updateContent}
-                  onNoteChange={(id, val) => updateContent(id, 'notes', val)}
-                  onDelete={deleteContent}
-                  allowDrag={false}
-                  activeDragId={activeDragId}
-                  overDragId={overDragId}
-                  dropPosition={dropPosition}
-                  sortable={null}
-                />
+                    c={c}
+                    pillars={state.pillars}
+                    onStatusChange={updateContent}
+                    onNoteChange={(id, val) => updateContent(id, 'notes', val)}
+                    onPillarChange={(id, pillarId) => updateContent(id, 'pillarId', pillarId)}
+                    onDelete={deleteContent}
+                    allowDrag={false}
+                    activeDragId={activeDragId}
+                    overDragId={overDragId}
+                    dropPosition={dropPosition}
+                    sortable={null}
+                  />
               ))}
             </tbody>
           </table>
