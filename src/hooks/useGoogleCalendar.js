@@ -5,6 +5,7 @@ const FLAG_KEY     = 'gcal_connected'   // permanent — user wants to stay conn
 const TOKEN_KEY    = 'gcal_token'       // expires after 55 min
 const EXPIRES_KEY  = 'gcal_expires'
 const TOKEN_REFRESH_MARGIN_MS = 60 * 1000
+const SILENT_RECONNECT_TIMEOUT_MS = 4000
 
 function stripHtml(html) {
   const div = document.createElement('div')
@@ -75,11 +76,16 @@ export function useGoogleCalendar() {
   })
   const clientRef                 = useRef(null)
   const pendingInteractiveRef      = useRef(false)
+  const reconnectTimerRef          = useRef(null)
 
   // Fetch calendar data whenever we have a valid token
   useEffect(() => {
     if (accessToken) fetchAll(accessToken)
   }, [accessToken])
+
+  useEffect(() => {
+    return () => clearReconnectTimer()
+  }, [])
 
   // Init GIS token client
   useEffect(() => {
@@ -88,17 +94,16 @@ export function useGoogleCalendar() {
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
         scope: SCOPE,
         callback: (resp) => {
+          clearReconnectTimer()
+          pendingInteractiveRef.current = false
           if (resp.error || !resp.access_token) {
             console.warn('GCal auth error', resp.error || resp)
             clearStoredToken({ keepConnectionPreference: wantsStoredConnection() })
-            setAccessToken(null)
-            setEvents([])
-            setCalendars([])
+            resetCalendarState()
             setAuthStatus(wantsStoredConnection() ? 'needsInteraction' : 'disconnected')
             return
           }
           storeToken(resp)
-          pendingInteractiveRef.current = false
           setAuthStatus('connected')
           setAccessToken(resp.access_token)
         },
@@ -107,19 +112,20 @@ export function useGoogleCalendar() {
 
       const storedToken = readStoredToken()
       if (storedToken) {
+        clearReconnectTimer()
         setAccessToken(storedToken)
         setAuthStatus('connected')
       } else if (pendingInteractiveRef.current) {
-        client.requestAccessToken({ prompt: '' })
+        requestInteractiveToken()
       } else if (wantsStoredConnection()) {
-        setAuthStatus('reconnecting')
-        client.requestAccessToken({ prompt: 'none' })
+        requestSilentReconnect()
       }
     }
 
     if (window.google?.accounts?.oauth2) {
       init()
     } else {
+      if (wantsStoredConnection()) startReconnectTimer()
       const id = setInterval(() => {
         if (window.google?.accounts?.oauth2) { init(); clearInterval(id) }
       }, 200)
@@ -221,38 +227,69 @@ export function useGoogleCalendar() {
     }
   }
 
-  function handleExpiredToken() {
-    clearStoredToken({ keepConnectionPreference: true })
+  function clearReconnectTimer() {
+    if (!reconnectTimerRef.current) return
+    window.clearTimeout(reconnectTimerRef.current)
+    reconnectTimerRef.current = null
+  }
+
+  function resetCalendarState() {
     setAccessToken(null)
     setEvents([])
     setCalendars([])
+  }
 
+  function startReconnectTimer() {
+    clearReconnectTimer()
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null
+      if (readStoredToken()) return
+      resetCalendarState()
+      setAuthStatus(wantsStoredConnection() ? 'needsInteraction' : 'disconnected')
+    }, SILENT_RECONNECT_TIMEOUT_MS)
+  }
+
+  function requestSilentReconnect() {
     if (clientRef.current) {
       setAuthStatus('reconnecting')
+      startReconnectTimer()
       clientRef.current.requestAccessToken({ prompt: 'none' })
     } else {
       setAuthStatus('needsInteraction')
     }
   }
 
+  function requestInteractiveToken() {
+    clearReconnectTimer()
+    setAuthStatus('reconnecting')
+    clientRef.current.requestAccessToken({ prompt: 'select_account consent' })
+  }
+
+  function handleExpiredToken() {
+    clearStoredToken({ keepConnectionPreference: true })
+    resetCalendarState()
+    requestSilentReconnect()
+  }
+
   function connect() {
     localStorage.setItem(FLAG_KEY, '1')
-    setAuthStatus('reconnecting')
+    clearStoredToken({ keepConnectionPreference: true })
+    resetCalendarState()
 
     if (clientRef.current) {
-      clientRef.current.requestAccessToken({ prompt: '' })
+      requestInteractiveToken()
     } else {
       pendingInteractiveRef.current = true
+      setAuthStatus('needsInteraction')
     }
   }
 
   function disconnect() {
+    clearReconnectTimer()
     if (accessToken) window.google?.accounts.oauth2.revoke(accessToken, () => {})
     clearStoredToken()
-    setAccessToken(null)
+    resetCalendarState()
     setAuthStatus('disconnected')
-    setEvents([])
-    setCalendars([])
   }
 
   return {

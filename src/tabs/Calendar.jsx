@@ -637,6 +637,11 @@ export default function Calendar() {
     .filter(e => e.date >= todayStr)
     .sort(sortEventsForDisplay)
     .slice(0, 5)
+  const authButtonLabel = authStatus === 'reconnecting'
+    ? 'Sign in again'
+    : reconnectNeeded
+      ? 'Reconnect Google Calendar'
+      : 'Connect Google Calendar'
 
   return (
     <div className="panel">
@@ -654,7 +659,7 @@ export default function Calendar() {
             </button>
           ))}
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--border)', flexWrap: 'wrap', minWidth: 0 }}>
-            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: isConnected ? '#4285f4' : reconnectNeeded ? '#fbbc04' : '#ccc', display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: isConnected ? '#4285f4' : (reconnectNeeded || authStatus === 'reconnecting') ? '#fbbc04' : '#ccc', display: 'inline-block', flexShrink: 0 }} />
             {isConnected ? (
               <>
                 <span style={{ fontSize: '11px', color: 'var(--text2)' }}>
@@ -668,7 +673,7 @@ export default function Calendar() {
                   <span style={{ fontSize: '11px', color: 'var(--text2)' }}>Reconnecting…</span>
                 )}
                 <button className="btn-ghost" style={{ fontSize: '11px', padding: '2px 8px' }} onClick={connect}>
-                  {reconnectNeeded ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
+                  {authButtonLabel}
                 </button>
               </>
             )}
